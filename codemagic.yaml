@@ -1,82 +1,38 @@
-# codemagic.yaml
-
-# ────────────────────── CODESIGNING SETUP ──────────────────────
-code_signing:
-  automatic:
-    apple_team: 59JQEF7QYP
-    bundle_identifier: com.example.legaryanKare
-
-# ────────────────────── WORKFLOWS ────────────────────────────
 workflows:
-
-  # ───────────── 1️⃣ Simulator smoke-test ─────────────
-  test-ios-simulator:
-    name: Test iOS (Simulator)
-    environment:
-      flutter: stable
-
-    scripts:
-      - name: Get dependencies
-        script: flutter pub get
-
-      - name: Build for iOS simulator
-        script: flutter build ios --simulator --no-codesign
-
-    artifact_paths:
-      - build/ios/iphonesimulator/Runner.app
-
-  # ───────────── 2️⃣ iOS Release (signed) ─────────────
   ios-release:
-    name: iOS Release
-    max_build_duration: 60
+    name: iOS Release Build
     environment:
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-
-      # these must be set in the Codemagic UI as secure vars
       vars:
-        APP_STORE_CONNECT_PRIVATE_KEY: Encrypted
-        APP_STORE_CONNECT_KEY_ID:      Encrypted
-        APP_STORE_CONNECT_ISSUER_ID:   Encrypted
-
+        BUNDLE_ID: "com.example.harikarappios" # <-- Update to your correct bundle ID
+        APP_STORE_CONNECT_ISSUER_ID: Encrypted(YourEncryptedIssuerID)
+        APP_STORE_CONNECT_KEY_ID: Encrypted(YourEncryptedKeyID)
+        APP_STORE_CONNECT_PRIVATE_KEY: Encrypted(YourEncryptedPrivateKey)
+      flutter: stable
+      xcode: 15.0
     triggering:
       events:
         - push
-      branch_patterns:
-        - pattern: main
-          include: true
-
     scripts:
-      - name: Bump pubspec build number
-        script: |
-          echo "Incrementing build number…"
-          CURRENT=$(grep -E '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
-          NEXT=$((CURRENT+1))
-          sed -i.bak -E "s/\+[0-9]+$/+$NEXT/" pubspec.yaml
-          echo "New version line: $(grep -E '^version:' pubspec.yaml)"
-
       - name: Get Flutter packages
         script: flutter pub get
 
-      - name: Install CocoaPods
+      - name: Set up code signing
         script: |
-          cd ios
-          pod install --repo-update
-          cd ..
+          echo "Setting up code signing with automatic provisioning..."
 
-      - name: Build signed IPA
-        script: flutter build ipa --release
+      - name: Build IPA for release
+        script: |
+          flutter build ipa \
+            --release \
+            --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
-      - build/ios/archive/*.xcarchive
-      - pubspec.yaml
 
     publishing:
       app_store_connect:
-        api_key:   $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id:    $APP_STORE_CONNECT_KEY_ID
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_id: $APP_STORE_CONNECT_KEY_ID
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
-        # submit_to_app_store: true
+        submit_to_app_store: false # Set to true when ready for App Store
