@@ -1,38 +1,27 @@
 workflows:
   ios-release:
-    name: iOS Release Build
+    name: iOS Release
+    max_build_duration: 60
     environment:
-      vars:
-        BUNDLE_ID: "com.example.harikarappios" # <-- Update to your correct bundle ID
-        APP_STORE_CONNECT_ISSUER_ID: Encrypted(YourEncryptedIssuerID)
-        APP_STORE_CONNECT_KEY_ID: Encrypted(YourEncryptedKeyID)
-        APP_STORE_CONNECT_PRIVATE_KEY: Encrypted(YourEncryptedPrivateKey)
       flutter: stable
-      xcode: 15.0
-    triggering:
-      events:
-        - push
+      xcode: 16.4
+      vars:
+        BUNDLE_ID: "com.example.harikarappios" # <-- Change this to your real Bundle ID
+      groups:
+        - app_store_credentials
     scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-
-      - name: Set up code signing
+      - name: Install dependencies
         script: |
-          echo "Setting up code signing with automatic provisioning..."
-
-      - name: Build IPA for release
+          flutter pub get
+      - name: Build IPA
         script: |
-          flutter build ipa \
-            --release \
-            --export-options-plist=/Users/builder/export_options.plist
-
+          flutter build ipa --release
     artifacts:
       - build/ios/ipa/*.ipa
-
     publishing:
       app_store_connect:
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         key_id: $APP_STORE_CONNECT_KEY_ID
         private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
-        submit_to_app_store: false # Set to true when ready for App Store
+        submit_to_app_store: false
