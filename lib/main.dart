@@ -108,8 +108,8 @@ class _ErrorHandlerState extends State<ErrorHandler> {
 
 class LocaleProvider extends ChangeNotifier {
   Locale _locale;
-  LocaleProvider([String code = 'ku'])
-      : _locale = Locale(code, code == 'ku' ? 'IQ' : '');
+  LocaleProvider([String code = 'en'])
+      : _locale = Locale(code, code == 'en' ? 'IQ' : '');
 
   Locale get locale => _locale;
 
@@ -136,7 +136,7 @@ class HarikarApp extends StatelessWidget {
       ),
       locale: localeProvider.locale,
       supportedLocales: const [
-        Locale('ku', 'IQ'),
+        Locale('en', 'IQ'),
         Locale('ar', 'IQ'),
       ],
       localeResolutionCallback: (locale, supportedLocales) {
@@ -147,7 +147,7 @@ class HarikarApp extends StatelessWidget {
             }
           }
         }
-        return const Locale('ku', 'IQ');
+        return const Locale('en', 'IQ');
       },
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
