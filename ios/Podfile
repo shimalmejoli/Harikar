@@ -6,6 +6,7 @@ platform :ios, '12.0'
 use_frameworks!
 use_modular_headers!
 
+# This is the proper setup for Flutter iOS plugins
 target 'Runner' do
-  flutter_install_all_ios_pods!
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
