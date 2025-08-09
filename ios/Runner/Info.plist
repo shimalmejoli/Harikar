@@ -18,6 +18,8 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -43,14 +45,5 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-
-	<!-- Required for Flutter -->
-	<key>io.flutter.embedded_views_preview</key>
-	<true/>
-	<key>io.flutter.plugins.firebase.messaging</key>
-	<dict>
-		<key>auto_init_enabled</key>
-		<false/>
-	</dict>
 </dict>
 </plist>
