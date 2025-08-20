@@ -15,7 +15,7 @@ workflows:
       - name: Set up keychain for code signing
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files "com.example.harikarAppIos" --type IOS_APP_STORE
+          app-store-connect fetch-signing-files "com.harikar.app" --type IOS_APP_STORE
           keychain add-certificates
 
       - name: Build .ipa for release

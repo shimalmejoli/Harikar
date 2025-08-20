@@ -1,11 +1,11 @@
-name: harikar_app_ios
+name: harikar_app
 description: "A new Flutter project."
 
 # Prevent accidental publishing to pub.dev
 publish_to: 'none'
 
 # App version (used for App Store and TestFlight)
-version: 1.0.1+7
+version: 1.0.1+8
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
