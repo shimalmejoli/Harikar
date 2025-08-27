@@ -1,10 +1,7 @@
-<<<<<<< HEAD
+
 # harikar
 =======
 # harikar_app_ios
->>>>>>> 184b1bf585dc3f380a52211af7961473383a3a90
-
-A new Flutter project.
 
 ## Getting Started
 
