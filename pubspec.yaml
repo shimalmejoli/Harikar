@@ -1,9 +1,7 @@
 name: harikar
-description: "A new Flutter project."
-
+description: "Harikar project."
 
 version: 1.0.0+1
-
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -38,6 +36,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -58,3 +57,8 @@ flutter:
         - asset: assets/fonts/Roboto-Regular.ttf
         - asset: assets/fonts/Roboto-Bold.ttf
           weight: 700
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/logoicon.png"
