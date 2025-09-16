@@ -1,0 +1,15 @@
+# Set minimum iOS version (safe for iPhone 7+ and plugins like path_provider)
+platform :ios, '13.0'
+
+# Required for Swift-based plugins like path_provider_foundation
+use_frameworks! :linkage => :static
+use_modular_headers!
+
+target 'Runner' do
+  # Pods for Runner will be added here by Flutter
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_application_path = '../'
+  eval(File.read(File.join(flutter_application_path, '.flutter-plugins-dependencies')), binding)
+end
