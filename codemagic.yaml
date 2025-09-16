@@ -11,27 +11,24 @@ workflows:
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # 2️⃣ Clean iOS build & Pods to avoid old plugin crashes
-      - name: Clean Flutter & iOS build caches
+      # 2️⃣ Force clean & regenerate iOS Podfile and CocoaPods
+      - name: Generate iOS Podfile and CocoaPods files
         script: |
           flutter clean
           flutter pub get
           rm -rf ios/Pods
+          rm -rf ios/Podfile
           rm -rf ios/Podfile.lock
-          rm -rf ios/.symlinks
-          rm -rf ios/Flutter/Flutter.framework
-          rm -rf ios/Flutter/Flutter.podspec
-          pod repo update
           flutter build ios --no-codesign
 
-      # 3️⃣ Set up Apple signing (App Store distribution)
+      # 3️⃣ Set up Apple signing (App Store Distribution profile)
       - name: Set up keychain for code signing
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "com.heamasoft.harikar" --type IOS_APP_STORE
           keychain add-certificates
 
-      # 4️⃣ Build IPA for App Store release
+      # 4️⃣ Build IPA for release
       - name: Build .ipa for release
         script: flutter build ipa --release
 
