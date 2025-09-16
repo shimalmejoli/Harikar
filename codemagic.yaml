@@ -7,18 +7,22 @@ workflows:
       cocoapods: default
 
     scripts:
+      # 🔹 Install Flutter dependencies
       - name: Install Flutter dependencies
         script: flutter pub get
 
+      # 🔹 Generate iOS build files without signing
       - name: Generate iOS Podfile and CocoaPods files
         script: flutter build ios --no-codesign
 
+      # 🔹 Set up Apple code signing
       - name: Set up keychain for code signing
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "com.heamasoft.harikar" --type IOS_APP_STORE
           keychain add-certificates
 
+      # 🔹 Build IPA for release (no export_options.plist → let Codemagic handle it)
       - name: Build .ipa for release
         script: flutter build ipa --release
 
@@ -27,6 +31,10 @@ workflows:
       - build/ios/archive/*.xcarchive
 
     publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
       email:
         recipients:
           - heama.soft@gmail.com
