@@ -11,27 +11,34 @@ workflows:
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # 2️⃣ Clean iOS build caches
+      # 2️⃣ Clean Flutter & iOS build caches
       - name: Clean iOS build
         script: |
           flutter clean
           flutter pub get
 
-      # 3️⃣ Install CocoaPods using your custom Podfile
+      # 3️⃣ Install CocoaPods (force fresh install of plugins like image_picker_ios)
       - name: Install CocoaPods
         script: |
           cd ios
-          pod install --repo-update
+          rm -rf Pods Podfile.lock .symlinks
+          pod repo update
+          pod install
           cd ..
 
-      # 4️⃣ Set up Apple signing (App Store Distribution profile)
+      # 4️⃣ Disable Bitcode (fixes iPhone 7 / iOS 15 crashes)
+      - name: Disable Bitcode
+        script: |
+          sed -i '' 's/ENABLE_BITCODE = YES;/ENABLE_BITCODE = NO;/g' ios/Runner.xcodeproj/project.pbxproj
+
+      # 5️⃣ Set up Apple signing (App Store Distribution profile)
       - name: Set up keychain for code signing
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "com.heamasoft.harikar" --type IOS_APP_STORE
           keychain add-certificates
 
-      # 5️⃣ Build IPA for release
+      # 6️⃣ Build IPA for release (TestFlight / App Store)
       - name: Build .ipa for release
         script: flutter build ipa --release
 
