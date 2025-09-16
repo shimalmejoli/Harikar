@@ -7,12 +7,12 @@ workflows:
       cocoapods: default
 
     scripts:
-      # 1️⃣ Install Flutter dependencies
+      # 1️⃣ Get dependencies
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # 2️⃣ Force clean & regenerate iOS Podfile and CocoaPods
-      - name: Generate iOS Podfile and CocoaPods files
+      # 2️⃣ Clean & regenerate iOS build files (forces Flutter to create Podfile + Generated.xcconfig)
+      - name: Regenerate iOS project and Pods
         script: |
           flutter clean
           flutter pub get
@@ -21,14 +21,19 @@ workflows:
           rm -rf ios/Podfile.lock
           flutter build ios --no-codesign
 
-      # 3️⃣ Set up Apple signing (App Store Distribution profile)
+      # 3️⃣ Disable Bitcode (fix crash on iPhone 7 / iOS 15)
+      - name: Disable Bitcode
+        script: |
+          sed -i '' 's/ENABLE_BITCODE = YES;/ENABLE_BITCODE = NO;/g' ios/Runner.xcodeproj/project.pbxproj
+
+      # 4️⃣ Setup Apple signing (App Store distribution)
       - name: Set up keychain for code signing
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "com.heamasoft.harikar" --type IOS_APP_STORE
           keychain add-certificates
 
-      # 4️⃣ Build IPA for release
+      # 5️⃣ Build IPA for release
       - name: Build .ipa for release
         script: flutter build ipa --release
 
@@ -38,7 +43,7 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration   # Requires App Store Connect API key in Codemagic
+        auth: integration   # Requires API key in Codemagic
         submit_to_testflight: true
         submit_to_app_store: false
       email:
