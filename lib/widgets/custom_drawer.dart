@@ -1,6 +1,6 @@
 // lib/widgets/custom_drawer.dart
-
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
@@ -8,7 +8,6 @@ import '../screens/AboutUsPage.dart';
 import '../screens/FeedbackPage.dart';
 import '../screens/feedback_screen.dart';
 import '../screens/profile_screen.dart';
-// Import LocaleProvider from your main file (adjust path if needed)
 import '../main.dart';
 
 class CustomDrawer extends StatelessWidget {
@@ -19,6 +18,76 @@ class CustomDrawer extends StatelessWidget {
 
     List<Widget> menuItems = [];
 
+    /// helper: delete account permanently
+    Future<void> _deleteAccount() async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title:
+              Text(isArabic ? "تأكيد الحذف" : "دڵنیایت لە سڕینەوەی ئەکاونت؟"),
+          content: Text(isArabic
+              ? "سيتم حذف حسابك وجميع بياناتك نهائيًا."
+              : "ئەکاونتەکەت و هەموو زانیاریەکان بە تەواوی دەسڕدرێن."),
+          actions: [
+            TextButton(
+              child: Text(isArabic ? "إلغاء" : "پاشگەزبوونەوە"),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: Text(isArabic ? "حذف" : "سڕینەوە"),
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        final prefs = await SharedPreferences.getInstance();
+        final userId = prefs.getInt('user_id');
+
+        if (userId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isArabic
+                  ? "تعذر تحديد المستخدم."
+                  : "نەیتوانرا ئەکاونتەکەت بدۆزرێتەوە"),
+            ),
+          );
+          return;
+        }
+
+        final response = await http.post(
+          Uri.parse('https://legaryan.heama-soft.com/delete_account.php'),
+          body: {'user_id': userId.toString()},
+        );
+
+        if (response.statusCode == 200 &&
+            response.body.contains('"success":true')) {
+          Provider.of<UserModel>(context, listen: false).clearUser();
+          await prefs.clear();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isArabic
+                  ? "تم حذف الحساب بنجاح"
+                  : "ئەکاونتەکەت بە سەرکەوتوویی سڕدرایەوە"),
+            ),
+          );
+          Navigator.pushReplacementNamed(context, '/login');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isArabic
+                  ? "فشل حذف الحساب."
+                  : "هەڵەیەک ڕویدا لە سڕینەوەی ئەکاونت."),
+            ),
+          );
+        }
+      }
+    }
+
+    // ========================== MENU ITEMS ==========================
     if (user.role == 'admin') {
       menuItems = [
         _buildMenuItem(
@@ -33,7 +102,7 @@ class CustomDrawer extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => ProfileScreen(
+                builder: (_) => ProfileScreen(
                   userName: user.name,
                   phoneNumber: user.phoneNumber,
                 ),
@@ -74,34 +143,42 @@ class CustomDrawer extends StatelessWidget {
         ),
         _buildMenuItem(
           icon: Icons.list,
-          title: isArabic ? "تعديل  مستخدم" : ' ئاپدتکرنا کارهێنەرا',
+          title: isArabic ? "تعديل مستخدم" : 'ئاپدتکرنا کارهێنەرا',
           onTap: () => Navigator.pushNamed(context, '/user2'),
         ),
         _buildMenuItem(
           icon: Icons.list,
-          title: isArabic ? "تعديل  اعلانات" : ' ئاپدتکرنا ریکلام',
+          title: isArabic ? "تعديل اعلانات" : 'ئاپدتکرنا ریکلام',
           onTap: () => Navigator.pushNamed(context, '/ads'),
         ),
         Divider(),
         _buildMenuItem(
           icon: Icons.settings,
           title: isArabic ? "الإبلاغ" : 'سکالا',
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (context) => FeedbackScreen())),
+          onTap: () => Navigator.push(
+              context, MaterialPageRoute(builder: (_) => FeedbackScreen())),
         ),
         _buildMenuItem(
           icon: Icons.settings,
           title: isArabic ? "قسم الإبلاغ" : 'بەشێ سکالا',
           onTap: () => Navigator.push(
-              context, MaterialPageRoute(builder: (context) => FeedbackPage())),
+              context, MaterialPageRoute(builder: (_) => FeedbackPage())),
         ),
         _buildMenuItem(
           icon: Icons.info,
           title: isArabic ? "حول" : 'دەربارە',
           onTap: () => Navigator.push(
-              context, MaterialPageRoute(builder: (context) => AboutUsPage())),
+              context, MaterialPageRoute(builder: (_) => AboutUsPage())),
         ),
         Divider(),
+
+        /// ✅ NEW Delete Account
+        _buildMenuItem(
+          icon: Icons.delete_forever,
+          title: isArabic ? "حذف الحساب" : 'سڕینەوەی ئەکاونت',
+          onTap: _deleteAccount,
+        ),
+
         _buildMenuItem(
           icon: Icons.exit_to_app,
           title: isArabic ? "تسجيل الخروج" : 'دەرچوون',
@@ -127,7 +204,7 @@ class CustomDrawer extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => ProfileScreen(
+                builder: (_) => ProfileScreen(
                   userName: user.name,
                   phoneNumber: user.phoneNumber,
                 ),
@@ -138,16 +215,24 @@ class CustomDrawer extends StatelessWidget {
         _buildMenuItem(
           icon: Icons.settings,
           title: isArabic ? "الإبلاغ" : 'سکالا',
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (context) => FeedbackScreen())),
+          onTap: () => Navigator.push(
+              context, MaterialPageRoute(builder: (_) => FeedbackScreen())),
         ),
         _buildMenuItem(
           icon: Icons.info,
           title: isArabic ? "حول" : 'دەربارە',
           onTap: () => Navigator.push(
-              context, MaterialPageRoute(builder: (context) => AboutUsPage())),
+              context, MaterialPageRoute(builder: (_) => AboutUsPage())),
         ),
         Divider(),
+
+        /// ✅ Delete Account for normal user
+        _buildMenuItem(
+          icon: Icons.delete_forever,
+          title: isArabic ? "حذف الحساب" : 'سڕینەوەی ئەکاونت',
+          onTap: _deleteAccount,
+        ),
+
         _buildMenuItem(
           icon: Icons.exit_to_app,
           title: isArabic ? "تسجيل الخروج" : 'دەرچوون',
@@ -174,14 +259,14 @@ class CustomDrawer extends StatelessWidget {
         _buildMenuItem(
           icon: Icons.settings,
           title: isArabic ? "الإبلاغ" : 'سکالا',
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (context) => FeedbackScreen())),
+          onTap: () => Navigator.push(
+              context, MaterialPageRoute(builder: (_) => FeedbackScreen())),
         ),
         _buildMenuItem(
           icon: Icons.info,
           title: isArabic ? "حول" : 'دەربارە',
           onTap: () => Navigator.push(
-              context, MaterialPageRoute(builder: (context) => AboutUsPage())),
+              context, MaterialPageRoute(builder: (_) => AboutUsPage())),
         ),
         Divider(),
         _buildMenuItem(
@@ -192,7 +277,7 @@ class CustomDrawer extends StatelessWidget {
       ];
     }
 
-    // Append language selection at end
+    // ========================== LANGUAGE SELECTOR ==========================
     menuItems.add(Divider());
     menuItems.add(_buildMenuItem(
       icon: Icons.language,
@@ -200,6 +285,7 @@ class CustomDrawer extends StatelessWidget {
       onTap: () => _showLanguageDialog(context),
     ));
 
+    // ========================== DRAWER ==========================
     return Drawer(
       child: SafeArea(
         child: ListView(
@@ -239,47 +325,47 @@ class CustomDrawer extends StatelessWidget {
     );
   }
 
+  // ========================== LANGUAGE DIALOG ==========================
   void _showLanguageDialog(BuildContext context) {
     final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(isArabic ? "اختر اللغة" : "زمان هەلبژێرە"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text('کوردی'),
-                onTap: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('selectedLanguage', 'ku');
-                  Provider.of<LocaleProvider>(context, listen: false)
-                      .setLocale(Locale('ku', 'IQ'));
-                  Navigator.of(context)
-                    ..pop() // close dialog
-                    ..pop(); // close drawer
-                },
-              ),
-              ListTile(
-                title: Text('العربية'),
-                onTap: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('selectedLanguage', 'ar');
-                  Provider.of<LocaleProvider>(context, listen: false)
-                      .setLocale(Locale('ar', ''));
-                  Navigator.of(context)
-                    ..pop()
-                    ..pop();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (_) => AlertDialog(
+        title: Text(isArabic ? "اختر اللغة" : "زمان هەلبژێرە"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text('کوردی'),
+              onTap: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('selectedLanguage', 'ku');
+                Provider.of<LocaleProvider>(context, listen: false)
+                    .setLocale(Locale('ku', 'IQ'));
+                Navigator.of(context)
+                  ..pop()
+                  ..pop();
+              },
+            ),
+            ListTile(
+              title: Text('العربية'),
+              onTap: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('selectedLanguage', 'ar');
+                Provider.of<LocaleProvider>(context, listen: false)
+                    .setLocale(Locale('ar', ''));
+                Navigator.of(context)
+                  ..pop()
+                  ..pop();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
+  // ========================== MENU ITEM BUILDER ==========================
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
