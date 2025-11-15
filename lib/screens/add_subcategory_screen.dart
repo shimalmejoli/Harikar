@@ -52,7 +52,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
       }
     } catch (e) {
       _showMessage(
-          isArabic ? "خطأ في جلب الفئات: $e" : "هەڵە لە هەڵگرتنی پۆلەکان: $e");
+          isArabic ? "خطأ في جلب الفئات: $e" : "شاشي د تۆمارکرنا پۆلان دا: $e");
     }
   }
 
@@ -73,7 +73,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
     } catch (e) {
       _showMessage(isArabic
           ? "خطأ في جلب الفئات الفرعية: $e"
-          : "هەڵە لە هەڵگرتنی نێوپۆلەکان: $e");
+          : "شاشي د تۆمارکرنا ژێرپۆلان دا: $e");
     }
   }
 
@@ -99,7 +99,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
     if (subCategoryName.isEmpty || _selectedCategoryId == null) {
       _showMessage(isArabic
           ? "يجب اختيار الفئة واسم الفئة الفرعية."
-          : "پۆل و ناوی نێوپۆل پێویستە.");
+          : "پۆل و ناڤێ ژێرپۆلێ گەلەک یێ پێدڤیە");
       return;
     }
 
@@ -153,7 +153,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
         _showMessage(decodedResponse['message']);
       }
     } catch (e) {
-      _showMessage(isArabic ? "حدث خطأ: $e" : "هەڵە ڕویدا: $e");
+      _showMessage(isArabic ? "حدث خطأ: $e" : "خەلەتیك ڕوودا: $e");
     }
 
     setState(() {
@@ -182,14 +182,14 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           title: Text(
-            isArabic ? "تأكيد" : 'پشتڕاستکردنەوە',
+            isArabic ? "تأكيد" : 'پشتڕاستکرن',
             style:
                 TextStyle(fontFamily: 'NotoKufi', fontWeight: FontWeight.bold),
           ),
           content: Text(
             isArabic
                 ? "هل أنت متأكد من حذف الفئة الفرعية؟"
-                : 'دڵنیایت کە نێوپۆلەکە بسڕیتەوە؟',
+                : 'دڵنیای ژێبرنا ژێرپۆلێ؟',
             style: TextStyle(fontFamily: 'NotoKufi'),
           ),
           actions: [
@@ -260,8 +260,9 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
         _showMessage(responseData['message']);
       }
     } catch (e) {
-      _showMessage(
-          isArabic ? "خطأ في تحديث الحالة: $e" : "هەڵە لە نوێکردنەوەی دۆخ: $e");
+      _showMessage(isArabic
+          ? "خطأ في تحديث الحالة: $e"
+          : "خەلەتی د نویژەنکرنا رەوشێ دا: $e");
     }
   }
 
@@ -423,7 +424,9 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
       final updatedName = _editNameController.text.trim();
       if (updatedName.isEmpty) {
         _showMessage(
-            isArabic ? "يجب إدخال اسم الفئة الفرعية." : "ناوی نێوپۆل پێویستە.",
+            isArabic
+                ? "يجب إدخال اسم الفئة الفرعية."
+                : "ناڤێ ژێرپۆلێ گەلەک یێ پێدڤیە.",
             success: false);
         return;
       }
@@ -467,7 +470,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
         builder: (context, setDialogState) {
           return AlertDialog(
             title:
-                Text(isArabic ? "تحديث الفئة الفرعية" : 'نوێکردنەوەی نێوپۆل'),
+                Text(isArabic ? "تحديث الفئة الفرعية" : 'نویژەنکرنا ژێرپۆلێ'),
             content: SingleChildScrollView(
               child: Column(
                 children: [
@@ -522,14 +525,14 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text(isArabic ? "إلغاء" : 'پەشیمان بوون'),
+                child: Text(isArabic ? "إلغاء" : ' نەکرن'),
               ),
               ElevatedButton(
                 onPressed: _updateSubCategory,
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple),
                 child: Text(
-                  isArabic ? "تحديث" : 'نوێکردنەوە',
+                  isArabic ? "تحديث" : 'نویژەنکرن',
                   style: TextStyle(color: Colors.white),
                 ),
               ),
@@ -552,7 +555,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
           backgroundColor: Colors.deepPurple,
           iconTheme: IconThemeData(color: Colors.white),
           title: Text(
-            isArabic ? "إضافة فئة فرعية جديدة" : 'زیادکردنی نێوپۆلەکان',
+            isArabic ? "إضافة فئة فرعية جديدة" : 'زێدەکرنا ژێرپۆلان',
             style: TextStyle(color: Colors.white, fontFamily: 'NotoKufi'),
           ),
         ),
@@ -590,7 +593,8 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
                   TextField(
                     controller: _subCategoryController,
                     decoration: InputDecoration(
-                      labelText: isArabic ? "اسم الفئة الفرعية" : 'ناوی نێوپۆل',
+                      labelText:
+                          isArabic ? "اسم الفئة الفرعية" : 'ناڤێ ژێرپۆلێ',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.label, color: Colors.deepPurple),
                     ),
@@ -635,7 +639,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
                     child: _isLoading
                         ? CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            isArabic ? "إضافة" : 'زیادکردن',
+                            isArabic ? "إضافة" : 'زێدەکرن',
                             style: TextStyle(
                                 fontFamily: 'NotoKufi', color: Colors.white),
                           ),
@@ -651,7 +655,7 @@ class _AddSubCategoryScreenState extends State<AddSubCategoryScreen> {
                       child: Text(
                         isArabic
                             ? "لم يتم العثور على فئة."
-                            : 'هیچ پۆلەکان نەدۆزرایەوە.',
+                            : 'چ پۆل نەهاتنە دیتن.',
                         style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
                       ),
                     )

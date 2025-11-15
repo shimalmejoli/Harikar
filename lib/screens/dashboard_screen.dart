@@ -94,6 +94,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Fetch categories from API, store original_name, apply order & translation
   Future<void> _fetchCategories() async {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final isBadini = Localizations.localeOf(context).languageCode ==
+        'ku'; // Assuming 'ku' for Badini/Kurmanji
     setState(() => _isLoading = true);
 
     try {
@@ -132,17 +134,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (e) {
       print("Error fetching categories: $e");
+
+      // Determine the correct non-Arabic error message
+      String errorMessage =
+          "Error fetching categories. Please try again later.";
+      if (isBadini) {
+        errorMessage =
+            "خەلەتی د ڤەهاندنا پۆلان دا. هیڤیە دووبارە بکەڤە."; // Badini: Xaletî di vehandina polan da. Hîvîye dûbare bikeve.
+      } else if (!isArabic) {
+        errorMessage =
+            "فشل في تحميل الأقسام. الرجاء المحاولة لاحقاً."; // Keep the existing Arabic/Sorani fallback if not Badini
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             isArabic
                 ? "فشل في تحميل الأقسام. الرجاء المحاولة لاحقاً."
-                : "Error fetching categories. Please try again later.",
+                : errorMessage,
             style: TextStyle(fontFamily: 'NotoKufi'),
           ),
           backgroundColor: Colors.redAccent,
           action: SnackBarAction(
-            label: isArabic ? 'إعادة المحاولة' : 'Retry',
+            label: isArabic
+                ? 'إعادة المحاولة'
+                : (isBadini ? 'دووبارەکرن' : 'Retry'), // Badini: Dûbarekirin
             textColor: Colors.white,
             onPressed: _fetchCategories,
           ),
@@ -245,7 +261,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           title: Text(
-            isArabic ? "الصفحة الرئيسية" : 'پەڕەی سەرەکی',
+            isArabic ? "الصفحة الرئيسية" : 'پەڕا سەرەکی', // Badini: Pera serkeî
             style: TextStyle(
               fontFamily: 'NotoKufi',
               fontSize: 20,
@@ -309,12 +325,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           items: [
             BottomNavigationBarItem(
                 icon: Icon(Icons.home),
-                label: isArabic ? "الصفحة الرئيسية" : 'پەڕەی سەرەکی'),
+                label: isArabic
+                    ? "الصفحة الرئيسية"
+                    : 'پەڕا سەرەکی'), // Badini: Pera serkeî
             BottomNavigationBarItem(
                 icon: Icon(Icons.app_registration),
-                label: isArabic ? "التسجيل" : 'خۆتۆمارکردن'),
+                label: isArabic
+                    ? "التسجيل"
+                    : 'خۆتۆمارکرن'), // Badini: Xotomârkirin
             BottomNavigationBarItem(
-                icon: Icon(Icons.info), label: isArabic ? "حول" : 'دەربارە'),
+                icon: Icon(Icons.info),
+                label: isArabic ? "حول" : 'دەربارە'), // Badini: Derbare
           ],
           selectedItemColor: Colors.blueAccent,
           unselectedItemColor: Colors.grey,
@@ -411,7 +432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Text(
                         isArabic
                             ? 'إذا كنت ترغب في عرض إعلانك أيضًا في التطبيق، حاول الاتصال بهذا الرقم'
-                            : 'ژ بو ریکلام کرنێ دناڤ پرۆگرامێ هاریکاردا و پێشاندانا کارێ تە ، پەیوەندی ڤێ ژمارێ بکە',
+                            : 'ژ بۆ ڕیکلامکرنێ دناڤ بەرنامەیێ هاریکار دا، پەیوەندی ب ڤێ ژمارێ بکە', // Badini: Jî bo rîklamkirinê dinav bernâmeyê hârîkâr da, peywendî b vî jimare bikê
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -449,6 +470,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildLoadingState(bool isArabic) {
+    final isBadini = Localizations.localeOf(context).languageCode == 'ku';
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -468,7 +491,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             CircularProgressIndicator(),
             SizedBox(height: 16),
             Text(
-              isArabic ? "جاري تحميل الأقسام..." : 'جارى بارکردنى بەشەکان...',
+              isArabic
+                  ? "جاري تحميل الأقسام..."
+                  : 'بەرێخستنا پۆلان د چێبیت...', // Badini: Berêxistina polan di çêbît...
               style: TextStyle(
                 fontFamily: 'NotoKufi',
                 fontSize: 16,
@@ -482,10 +507,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSlideshowSection(bool isArabic) {
+    final isBadini = Localizations.localeOf(context).languageCode == 'ku';
+
     if (_infiniteSlideshowData.isEmpty) {
       return Center(
         child: Text(
-          isArabic ? "لا يوجد تصميمات." : 'هیچ کارەساتی دیزاین کراوە نیە.',
+          isArabic
+              ? "لا يوجد تصميمات."
+              : 'چ کارێن دیزاینکری نینن.', // Badini: Ç karên dîzayinkirî nînin.
           style: TextStyle(
             fontFamily: 'NotoKufi',
             fontSize: 16,

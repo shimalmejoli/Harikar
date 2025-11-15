@@ -55,7 +55,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
       }
     } catch (e) {
       _showMessage(
-          isArabic ? "خطأ في جلب الفئات: $e" : "هەڵە لە هەڵگرتنی کارەکان: $e");
+          isArabic ? "خطأ في جلب الفئات: $e" : "شاشي د تۆمارکرنا کاران دا: $e");
     }
   }
 
@@ -76,7 +76,8 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
 
     // Validation
     if (categoryName.isEmpty) {
-      _showMessage(isArabic ? "يجب إدخال اسم الفئة." : "ناوی کار پێویستە.");
+      _showMessage(
+          isArabic ? "يجب إدخال اسم الفئة." : "ناڤێ کارێ گەلەک یێ پێدڤیە.");
       return;
     }
 
@@ -174,7 +175,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
           title: Text(isArabic ? "تأكيد" : 'پشتڕاستکردنەوە'),
           content: Text(isArabic
               ? "هل أنت متأكد من حذف الفئة؟"
-              : 'دڵنیایت کە جۆری کارەکە بسڕیتەوە؟'),
+              : 'دڵنیای ژێبرنا جۆرێ کارێ؟'),
           actions: [
             TextButton(
               child: Text(isArabic ? "لا" : 'نەخێر',
@@ -360,7 +361,8 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
       final String updatedName = _editNameController.text.trim();
 
       if (updatedName.isEmpty) {
-        _showMessage(isArabic ? "يجب إدخال اسم الفئة." : "ناوی پۆلێ پێویستە.");
+        _showMessage(
+            isArabic ? "يجب إدخال اسم الفئة." : "ناڤێ پۆلێ گەلەک یێ پێدڤیە.");
         return;
       }
 
@@ -407,7 +409,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
           return Directionality(
             textDirection: TextDirection.rtl,
             child: AlertDialog(
-              title: Text(isArabic ? "تحديث الفئة" : 'نوێکردنەوەی جۆری کار'),
+              title: Text(isArabic ? "تحديث الفئة" : 'نویژەنکرنا جۆرێ کارێ'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -415,7 +417,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
                     TextField(
                       controller: _editNameController,
                       decoration: InputDecoration(
-                        labelText: isArabic ? "اسم الفئة" : 'ناوی کارەکە',
+                        labelText: isArabic ? "اسم الفئة" : 'ناڤێ کارێ',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -467,7 +469,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
                       backgroundColor: Colors.deepPurple),
                   onPressed: _updateCategory,
                   child: Text(
-                    isArabic ? "تحديث" : 'نوێکردنەوە',
+                    isArabic ? "تحديث" : 'نویژەنکرن',
                     style: TextStyle(color: Colors.white),
                   ),
                 ),
@@ -491,7 +493,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
           backgroundColor: Colors.deepPurple,
           iconTheme: IconThemeData(color: Colors.white),
           title: Text(
-            isArabic ? "إضافة فئة جديدة" : 'زیادکردنی کارێ نوێ',
+            isArabic ? "إضافة فئة جديدة" : 'زێدەکرنا کارەکێ نوی',
             style: TextStyle(color: Colors.white, fontFamily: 'NotoKufi'),
           ),
         ),
@@ -507,7 +509,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
                     controller: _categoryController,
                     textDirection: TextDirection.rtl,
                     decoration: InputDecoration(
-                      labelText: isArabic ? "اسم الفئة" : 'ناوی جۆری کار',
+                      labelText: isArabic ? "اسم الفئة" : 'ناڤێ جۆرێ کارێ',
                       prefixIcon:
                           Icon(Icons.category, color: Colors.deepPurple),
                       border: OutlineInputBorder(),
@@ -563,7 +565,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
                       child: Text(
                         isArabic
                             ? "لم يتم العثور على فئة."
-                            : 'هیچ کارەك نەدۆزرایەوە.',
+                            : 'چ کار نەهاتنە دیتن',
                         style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
                       ),
                     )

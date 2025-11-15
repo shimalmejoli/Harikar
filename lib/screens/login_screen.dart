@@ -27,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (input.isEmpty || password.isEmpty) {
       _showMessage(isArabic
           ? "يجب إدخال رقم الهاتف أو اسم المستخدم وكلمة المرور."
-          : "ژمارەی مۆبایل یان ناوی بەکارەوەر و وشەی نهێنی پێویستە.");
+          : "ژمارەی مۆبایل یان ناڤی بەکارەوەر و وشەی نهێنی پێویستە.");
       return;
     }
 
@@ -139,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     isArabic
                         ? "يرجى إدخال رقم الهاتف أو اسم المستخدم وكلمة المرور"
-                        : 'تکایە ژمارەی مۆبایل یان ناو و وشەی نهێنی داخڵ بکە',
+                        : 'هێڤیە ژمارا مۆبایلێ یان ناڤ و پەیڤا نهێنی تومار بکە',
                     style: const TextStyle(
                       fontSize: 18,
                       fontFamily: 'NotoKufi',
@@ -171,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: !_isPasswordVisible,
                     decoration: InputDecoration(
-                      labelText: isArabic ? "كلمة المرور" : 'وشەی نهێنی',
+                      labelText: isArabic ? "كلمة المرور" : 'پایڤا نهێنی',
                       labelStyle: const TextStyle(fontFamily: 'NotoKufi'),
                       prefixIcon:
                           const Icon(Icons.lock, color: Colors.deepPurple),
@@ -209,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 AlwaysStoppedAnimation<Color>(Colors.white),
                           )
                         : Text(
-                            isArabic ? "تسجيل الدخول" : 'چوونەژوورەوە',
+                            isArabic ? "تسجيل الدخول" : 'چونا ژور',
                             style: const TextStyle(
                               fontSize: 18,
                               fontFamily: 'NotoKufi',
@@ -225,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       isArabic
                           ? "هل نسيت كلمة المرور؟"
-                          : 'وشەی نهێنی لەبیرت چووە؟',
+                          : 'پەیڤا نهێنی ژ بیرا تە چوویە',
                       style: const TextStyle(
                         color: Colors.deepPurple,
                         fontFamily: 'NotoKufi',
@@ -243,7 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       isArabic
                           ? "لم تقم بالتسجيل بعد؟ سجل الآن"
-                          : 'هێشتا خۆتۆمار نەبوویت؟ خۆتۆمارکردن',
+                          : 'هێشتا تە خو تومار نەکریە! خو تومار بکە',
                       style: const TextStyle(
                         color: Colors.deepPurple,
                         fontFamily: 'NotoKufi',

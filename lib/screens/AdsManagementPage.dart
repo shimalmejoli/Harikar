@@ -88,8 +88,16 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
     if (resp.statusCode == 200) {
       _fetchAds();
     } else {
+      final locale = Localizations.localeOf(context).languageCode;
+      final isArabic = locale == 'ar';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to delete ad')),
+        SnackBar(
+            content: Text(
+          isArabic
+              ? 'فشل حذف الإعلان'
+              : 'خەلەتی د ژێبرنا ریکلامی دا', // Badini: Xaletî di jêbirna rîklamî da
+          style: const TextStyle(fontFamily: 'NotoKufi'),
+        )),
       );
     }
   }
@@ -104,26 +112,28 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           title: Text(
-            isArabic ? 'تأكيد الحذف' : 'دڵنیابوون بۆ سڕینەوە',
+            isArabic
+                ? 'تأكيد الحذف'
+                : 'دڵنیابوون ژێبرنێ', // Badini: Dilnîyabûn jêbirnê
             style: const TextStyle(fontFamily: 'NotoKufi'),
           ),
           content: Text(
             isArabic
                 ? 'هل أنت متأكد أنك تريد حذف هذا الإعلان؟'
-                : 'دڵنیایت بۆ سڕینەوەی ئەم ڕیکلامە؟',
+                : 'دڵنیای ژێبرنا ڤی ریکلامی؟', // Badini: Dilnîyay jêbirna vî rîklamî?
             style: const TextStyle(fontFamily: 'NotoKufi'),
           ),
           actions: [
             TextButton(
               child: Text(
-                isArabic ? 'إلغاء' : 'ڕەتکردنەوە',
+                isArabic ? 'إلغاء' : 'هەلڤەشاندن', // Badini: Helveshandin
                 style: const TextStyle(fontFamily: 'NotoKufi'),
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
               child: Text(
-                isArabic ? 'حذف' : 'سڕینەوە',
+                isArabic ? 'حذف' : 'ژێبرن', // Badini: Jêbirn
                 style: const TextStyle(
                   color: Colors.redAccent,
                   fontFamily: 'NotoKufi',
@@ -141,9 +151,18 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
   }
 
   Future<void> _addAd() async {
+    final locale = Localizations.localeOf(context).languageCode;
+    final isArabic = locale == 'ar';
+
     if (_ads.length >= 5) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot have more than 5 ads.')),
+        SnackBar(
+            content: Text(
+          isArabic
+              ? 'لا يمكن أن يكون هناك أكثر من 5 إعلانات.'
+              : 'ناهێت کرن پتر ژ ٥ ریکلامان هەبن.', // Badini: Nahêt kirin pîtir jî 5 rîklaman hebîn.
+          style: const TextStyle(fontFamily: 'NotoKufi'),
+        )),
       );
       return;
     }
@@ -161,7 +180,13 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
         _fetchAds();
       else
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to add ad')),
+          SnackBar(
+              content: Text(
+            isArabic
+                ? 'فشل إضافة الإعلان'
+                : 'خەلەتی د زێدەکرنا ریکلامی دا', // Badini: Xaletî di zêdekirina rîklamî da
+            style: const TextStyle(fontFamily: 'NotoKufi'),
+          )),
         );
     }
   }
@@ -169,8 +194,9 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
   @override
   Widget build(BuildContext context) {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final placeholder =
-        isArabic ? 'ابحث بالاسم أو رقم الهاتف' : 'گەران بە ناو یان ژمارە';
+    final placeholder = isArabic
+        ? 'ابحث بالاسم أو رقم الهاتف'
+        : 'گەڕیان ب ناڤ یان ژمارێ'; // Badini: Gerrîyan b nav yan jimare
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -207,7 +233,9 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
               icon: const Icon(Icons.add),
               color: Colors.white,
               onPressed: _addAd,
-              tooltip: isArabic ? 'إضافة إعلان' : 'زیادکردنی ڕیکلام',
+              tooltip: isArabic
+                  ? 'إضافة إعلان'
+                  : 'زێدەکرنا ریکلامی', // Badini: Zêdekirina rîklamî
             ),
           ],
         ),
@@ -216,7 +244,9 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
             : _filteredAds.isEmpty
                 ? Center(
                     child: Text(
-                      isArabic ? 'لا توجد إعلانات' : 'هیچ ڕیکلامێک نیە',
+                      isArabic
+                          ? 'لا توجد إعلانات'
+                          : 'چ ریکلام نینن', // Badini: Ç rîklam nînin
                       style:
                           const TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
                     ),

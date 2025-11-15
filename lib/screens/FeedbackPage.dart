@@ -68,14 +68,14 @@ class _FeedbackPageState extends State<FeedbackPage> {
             _errorMessage = data['message'] ??
                 (isArabic
                     ? 'فشل في تحميل الملاحظات.'
-                    : 'هەڵە لە بارکردنی فیدباکەکان');
+                    : 'خەلەتی لە هنارتنا داتا دا');
           });
         }
       } else {
         setState(() {
           _errorMessage = isArabic
               ? 'خطأ في النظام: ${response.statusCode}'
-              : 'هەڵەی سیستەمی: ${response.statusCode}';
+              : 'خەلەتی ل سیستەمیدا: ${response.statusCode}';
         });
       }
     } catch (e) {
@@ -83,7 +83,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
       setState(() {
         _errorMessage = isArabic
             ? 'حدث خطأ أثناء جلب الملاحظات.'
-            : 'هەڵەیەک ڕوویدا لە هەڵگرتنی فیدباکەکان.';
+            : 'خەلەتی ڕوویدا لە هنارتنا فیدباکی دا.';
       });
     } finally {
       setState(() {
@@ -101,12 +101,12 @@ class _FeedbackPageState extends State<FeedbackPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(isArabic ? "حذف" : "سڕینەوە",
+          title: Text(isArabic ? "حذف" : "ژێبرن",
               style: TextStyle(fontFamily: 'NotoKufi')),
           content: Text(
               isArabic
                   ? "هل أنت متأكد من حذف هذه الملاحظات؟"
-                  : "دڵنیایە لە سڕینەوەی ئەم فیدباکە؟",
+                  : "پشت راستی ژێبرنێ؟",
               style: TextStyle(fontFamily: 'NotoKufi')),
           actions: [
             TextButton(
@@ -155,7 +155,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                isArabic ? "تم حذف الملاحظات." : "فیدباکەکە سڕایەوە.",
+                isArabic ? "تم حذف الملاحظات." : "فیدباکەکە هاتن ژێبرن.",
                 style: TextStyle(fontFamily: 'NotoKufi'),
               ),
             ),
@@ -165,7 +165,9 @@ class _FeedbackPageState extends State<FeedbackPage> {
             SnackBar(
                 content: Text(
               data['message'] ??
-                  (isArabic ? "فشل حذف الملاحظات." : "سڕینەوەی فیدباکە ناکرێ."),
+                  (isArabic
+                      ? "فشل حذف الملاحظات."
+                      : "ژێبرن فیدباکە سەرکەفتی نەبی."),
               style: TextStyle(fontFamily: 'NotoKufi'),
             )),
           );
@@ -176,7 +178,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
               content: Text(
             isArabic
                 ? "خطأ في النظام: ${response.statusCode}"
-                : "هەڵەی سیستەمی: ${response.statusCode}",
+                : "خەلەتی ل سیستەمی: ${response.statusCode}",
             style: TextStyle(fontFamily: 'NotoKufi'),
           )),
         );
@@ -186,7 +188,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(
-          isArabic ? "حدث خطأ أثناء حذف الملاحظات." : "هەڵەی سڕینەوەی فیدباکە",
+          isArabic ? "حدث خطأ أثناء حذف الملاحظات." : "خەلەتی ژێبرنا فیدباکە",
           style: TextStyle(fontFamily: 'NotoKufi'),
         )),
       );
@@ -206,7 +208,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
       builder: (context) {
         return AlertDialog(
           title: Text(
-            feedback['name'] ?? (isArabic ? "اسم المستخدم" : "ناوی بەکارهێنەر"),
+            feedback['name'] ?? (isArabic ? "اسم المستخدم" : "ناڤ بەکارهێنەر"),
             style: TextStyle(fontFamily: 'NotoKufi'),
           ),
           content: Column(

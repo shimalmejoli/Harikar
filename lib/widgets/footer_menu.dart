@@ -33,7 +33,7 @@ class FooterMenu extends StatelessWidget {
     String locale = Localizations.localeOf(context).languageCode;
     final labels = {
       'ar': ['الرئيسية', 'التسجيل', 'حول'],
-      'ku': ['پەڕەی سەرەکی', 'خۆتۆمارکردن', 'دەربارە'],
+      'ku': ['پەڕەی سەرەکی', 'خوتومارکرن', 'دەربارە'],
     };
     List<String> localizedLabels = labels[locale] ?? labels['ku']!;
 

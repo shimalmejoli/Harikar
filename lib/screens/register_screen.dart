@@ -285,13 +285,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildTextField(_fullNameController,
-                        isArabic ? "الاسم الكامل" : "ناوی تەواو", Icons.person,
+                    _buildTextField(
+                        _fullNameController,
+                        isArabic ? "الاسم الكامل" : " ناڤێ بەکارهێنەری",
+                        Icons.person,
                         isArabic: isArabic),
                     SizedBox(height: 15),
                     _buildTextField(
                       _phoneNumberController,
-                      isArabic ? "رقم الهاتف المحمول" : "ژمارەی مۆبایل",
+                      isArabic ? "رقم الهاتف المحمول" : "ژمارا موبایلێ",
                       Icons.phone,
                       inputType: TextInputType.phone,
                       formatters: [FilteringTextInputFormatter.digitsOnly],
@@ -299,7 +301,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     SizedBox(height: 15),
                     _buildDropdownField(
-                      labelText: isArabic ? "المدينة" : "شار",
+                      labelText: isArabic ? "المدينة" : "باژێر",
                       icon: Icons.location_city,
                       items: _cities.map((city) {
                         return DropdownMenuItem<String>(
@@ -314,7 +316,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     SizedBox(height: 15),
                     _buildDropdownField(
-                      labelText: isArabic ? "نوع العمل" : "جۆری کار",
+                      labelText: isArabic ? "نوع العمل" : "جۆری کاری",
                       icon: Icons.work,
                       items: _workTypes.map((item) {
                         return DropdownMenuItem<String>(
@@ -342,7 +344,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: _isLoading
                           ? CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              isArabic ? "تسجيل" : "خۆت تۆمار بکە",
+                              isArabic ? "تسجيل" : "خوتومارکە",
                               style: TextStyle(
                                 fontFamily: 'NotoKufi',
                                 fontSize: 18,
@@ -387,7 +389,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             child: Text(
                               isArabic
                                   ? "بعد التسجيل، سنتواصل معك للحصول على المزيد من المعلومات والتأكيد على نجاح العملية."
-                                  : "دوای تۆمارکردن، ئێمە پەیوەندی پێوە دەکەین بۆ زیاتر زانیاری کەوتن لەگەڵ تۆ و سەرکەوتو بوونەوە.",
+                                  : "پشتی تومارکرنێ دێ پویوەندی ب تەکین بو پتر پێزانینان دناف پروگرامێ هاریکاردا.",
                               style: TextStyle(
                                 fontFamily: 'NotoKufi',
                                 fontSize: 16,
@@ -432,7 +434,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Icon(Icons.app_registration, size: 60, color: Colors.white),
             SizedBox(height: 10),
             Text(
-              isArabic ? "تسجيل في برنامجنا" : "خۆتۆمارکردن بۆ پڕۆگرامەکەمان",
+              isArabic ? "سجل الان" : "خوتومارکرن بو ناڤ پروگرامی هاریکاردا",
               style: TextStyle(
                 fontFamily: 'NotoKufi',
                 fontSize: 22,
@@ -489,7 +491,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       controller: _passwordController,
       obscureText: !_isPasswordVisible,
       decoration: InputDecoration(
-        labelText: isArabic ? "كلمة المرور" : 'وشەی نهێنی',
+        labelText: isArabic ? "كلمة المرور" : 'پەیڤا نهێنی',
         prefixIcon: Icon(Icons.lock, color: Colors.deepPurple),
         suffixIcon: IconButton(
           icon: Icon(

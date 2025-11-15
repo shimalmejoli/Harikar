@@ -146,8 +146,8 @@ class _FormSearchWorkState extends State<FormSearchWork> {
     final Map<String, String> translations = {
       "ئەندازیار": "مهندس",
       "مەساح": "مساح",
-      "ئامیرە": "أدوات",
-      "هوستا": "وستا",
+      "ئامیرە": "مكائن",
+      "هوستا": "اسطة",
       "کرێکار": "عامل",
     };
     setState(() {
@@ -163,11 +163,31 @@ class _FormSearchWorkState extends State<FormSearchWork> {
 
   void _applySubcategoryTranslation() {
     final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
+
     final Map<String, String> translations = {
+      // Existing
       "شەڤەر": "شفل",
       "کرێکار": "عمال",
       "نەجار": "نجار",
-      // … add your mappings …
+
+      // New ones you asked
+
+      "مساح": "مساح",
+      "کەهرەبای": "كهربائي",
+      "حاديله": "ضاغطة التربة",
+      "تانكەرێ ئاڤێ": "تنكر ماء",
+      "سلنگ": "كرين",
+      "قەلابه": "قلاب",
+      "گرێدەر": "آلات تسوية الطرق",
+      "بەنا": "بناء",
+      "سەباخ": "صباغ",
+      "لەباخ": "لباخ",
+      "سيراميك و كاشي": "سيراميك و أرضيات",
+      "مەرمەر": "مرمر",
+      "سەقف مەخربی": "صقف مغربي",
+      "فلين": "فلين خارجي",
+      "حداد": "حداد",
+      "مجاري": "مجاري"
     };
     setState(() {
       _subcategories.forEach((catId, list) {

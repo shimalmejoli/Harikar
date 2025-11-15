@@ -176,7 +176,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              isArabic ? "صفحة الإبلاغ" : 'پەڕەی سکالا',
+              isArabic ? "صفحة الإبلاغ" : 'لاپەرێ سکالا',
               style: TextStyle(
                 fontFamily: 'NotoKufi',
                 fontSize: 22,
@@ -200,7 +200,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         children: [
           // Name Field
           _buildTextField(
-            label: isArabic ? "الاسم" : 'ناو',
+            label: isArabic ? "الاسم" : 'ناڤ',
             icon: Icons.person,
             validatorMessage:
                 isArabic ? "يرجى إدخال اسمك" : "تکایە ناوی خۆت بنووسە",
@@ -213,22 +213,21 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
           // Phone Number Field
           _buildTextField(
-            label: isArabic ? "رقم الجوال" : 'ژمارەی مۆبایل',
+            label: isArabic ? "رقم الجوال" : 'ژمارەی مۆبایلێ',
             icon: Icons.phone,
-            validatorMessage: isArabic
-                ? "يرجى إدخال رقم الجوال"
-                : "تکایە ژمارەی مۆبایل بنووسە",
+            validatorMessage:
+                isArabic ? "يرجى إدخال رقم الجوال" : "ژمارەی مۆبایل بنڤیسە",
             keyboardType: TextInputType.phone,
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return isArabic
                     ? "يرجى إدخال رقم الجوال"
-                    : "تکایە ژمارەی مۆبایل بنووسە";
+                    : " ژمارەی مۆبایلێ بنڤیسە";
               }
               if (!RegExp(r'^\+?[0-9]{7,15}$').hasMatch(value.trim())) {
                 return isArabic
                     ? "يرجى إدخال رقم جوال صحيح"
-                    : "ژمارەی مۆبایل دروست بنووسە";
+                    : "ژمارەی مۆبایلێ دروست بنڤیسە";
               }
               return null;
             },
@@ -243,7 +242,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             label: isArabic ? "الرسالة" : 'پەیام',
             icon: Icons.message,
             validatorMessage:
-                isArabic ? "يرجى إدخال رسالتك" : "تکایە پەیامەکەت بنووسە",
+                isArabic ? "يرجى إدخال رسالتك" : " پەیاما خو ژی بنڤیسە",
             maxLines: 5,
             onSaved: (value) {
               _message = value!.trim();
@@ -274,7 +273,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                       ),
                     )
                   : Text(
-                      isArabic ? "إرسال" : 'ناردن',
+                      isArabic ? "إرسال" : 'هنارتن',
                       style: TextStyle(
                         fontFamily: 'NotoKufi',
                         fontSize: 18,
@@ -311,7 +310,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                           child: Text(
                             isArabic
                                 ? "شكراً لملاحظاتك. سنعمل على حل المشكلة وسنتواصل معك في أقرب وقت."
-                                : "سوپاس بۆ فیدبەکەتان. ئێمە کێشەکە چارەسەر دەکەین و لە زووترین کاتدا پەیوەندیمان پێ دەکات.",
+                                : "سپاسی بۆ فیدباکا هەوە. ئەم دێ ئاریشێ/کێشێ چارەسەر کەین و دێ د نێزیکترین دەم دا پەیوەندیێ ب هەوە کەین.",
                             style: TextStyle(
                               fontFamily: 'NotoKufi',
                               fontSize: 16,
@@ -338,9 +337,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                           elevation: 3,
                         ),
                         child: Text(
-                          isArabic
-                              ? "العودة إلى الرئيسية"
-                              : 'گڕانەوە بۆ سەرەکی',
+                          isArabic ? "العودة إلى الرئيسية" : 'زڤرین بۆ سەرەکی',
                           style: TextStyle(
                             fontFamily: 'NotoKufi',
                             fontSize: 16,
