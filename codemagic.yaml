@@ -7,11 +7,23 @@ workflows:
       cocoapods: default
 
     scripts:
-      # 1️⃣ Get dependencies
+      # 1️⃣ Install Flutter packages
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # 2️⃣ Clean & regenerate iOS build files (forces Flutter to create Podfile + Generated.xcconfig)
+      # 2️⃣ Auto-increment build number only (Apple requires increasing build number)
+      - name: Auto-increment build number
+        script: |
+          VERSION_LINE=$(grep '^version:' pubspec.yaml)
+          VERSION=$(echo $VERSION_LINE | sed 's/version: //')
+          NAME=$(echo $VERSION | cut -d'+' -f1)
+          BUILD=$(echo $VERSION | cut -d'+' -f2)
+          NEW_BUILD=$((BUILD + 1))
+          echo "Updating version: $NAME+$NEW_BUILD"
+          sed -i '' "s/version: .*/version: $NAME+$NEW_BUILD/" pubspec.yaml
+          cat pubspec.yaml | grep version
+
+      # 3️⃣ Regenerate iOS files & Pods
       - name: Regenerate iOS project and Pods
         script: |
           flutter clean
@@ -21,19 +33,19 @@ workflows:
           rm -rf ios/Podfile.lock
           flutter build ios --no-codesign
 
-      # 3️⃣ Disable Bitcode (fix crash on iPhone 7 / iOS 15)
+      # 4️⃣ Disable Bitcode (still needed for older devices)
       - name: Disable Bitcode
         script: |
           sed -i '' 's/ENABLE_BITCODE = YES;/ENABLE_BITCODE = NO;/g' ios/Runner.xcodeproj/project.pbxproj
 
-      # 4️⃣ Setup Apple signing (App Store distribution)
+      # 5️⃣ Apple signing
       - name: Set up keychain for code signing
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "com.heamasoft.harikar" --type IOS_APP_STORE
           keychain add-certificates
 
-      # 5️⃣ Build IPA for release
+      # 6️⃣ Build IPA
       - name: Build .ipa for release
         script: flutter build ipa --release
 
@@ -43,7 +55,7 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration   # Requires API key in Codemagic
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
       email:
