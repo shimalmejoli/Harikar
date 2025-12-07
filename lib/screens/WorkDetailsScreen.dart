@@ -186,7 +186,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            isArabic ? "صفحة التفاصيل" : 'پەڕەی زانیاری',
+            isArabic ? "صفحة التفاصيل" : 'لاپەری زانیاری',
             style: TextStyle(
               fontFamily: 'NotoKufi',
               fontWeight: FontWeight.bold,
@@ -229,21 +229,21 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                             icon: Icons.description,
                             title: isArabic
                                 ? "وصف المستخدم"
-                                : 'پەسنی دەربارەی بەکارهێنەر',
+                                : ' دەربارەی بەکارهێنەری',
                             content: _details?['description'] ??
                                 (isArabic
                                     ? "لا يوجد وصف"
-                                    : 'بەسەر دەربارەی نادیارە'),
+                                    : ' دەربارەی بەکارهێنەری نەدیارە'),
                           ),
                           SizedBox(height: 16),
                           _buildInfoCard(
                             icon: Icons.info,
                             title:
-                                isArabic ? "معلومات إضافية" : 'زانیاری زۆرتر',
+                                isArabic ? "معلومات إضافية" : 'پێزانین زێدەتر',
                             content: _details?['additional_info'] ??
                                 (isArabic
                                     ? "لا توجد معلومات"
-                                    : 'زانیاری نادیارە'),
+                                    : 'زانیاری نەبەردەستن'),
                           ),
                           SizedBox(height: 24),
                           _buildImageSection(isArabic),
@@ -278,7 +278,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isArabic ? "الاسم:" : 'ناو:',
+                    isArabic ? "الاسم:" : 'ناڤ:',
                     style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 16,
@@ -289,7 +289,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                   SizedBox(height: 4),
                   Text(
                     _details?['name'] ??
-                        (isArabic ? "اسم المستخدم" : 'ناوی بەکارهێنەر'),
+                        (isArabic ? "اسم المستخدم" : 'ناڤێ بەکارهێنەری'),
                     style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 20,
@@ -300,7 +300,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    isArabic ? "فئة الأقسام:" : 'بابەتی ناو پۆلەکان:',
+                    isArabic ? "فئة الأقسام:" : 'بابەتی بەشێ سەرەکی :',
                     style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 16,
@@ -313,7 +313,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                     _details?['subcategory'] ??
                         (isArabic
                             ? "الفئة غير متوفرة"
-                            : 'بابەتی ناو پۆلەکان نادیارە'),
+                            : 'بابەتی نافێ بەشێ نەدیارە'),
                     style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 18,
@@ -330,7 +330,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isArabic ? "المكان:" : 'شوێن:',
+                    isArabic ? "المكان:" : 'جهێ کاری:',
                     style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 16,
@@ -350,7 +350,9 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                       Expanded(
                         child: Text(
                           _details?['location'] ??
-                              (isArabic ? "المكان غير محدد" : 'شوێن: نادیار'),
+                              (isArabic
+                                  ? "المكان غير محدد"
+                                  : 'جهێ کاری: نەدیار'),
                           style: TextStyle(
                             fontFamily: 'NotoKufi',
                             fontSize: 18,
@@ -363,7 +365,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    isArabic ? "رقم الهاتف:" : 'ژمارەی مۆبایل:',
+                    isArabic ? "رقم الهاتف:" : 'ژمارا مۆبایلی:',
                     style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 16,
@@ -388,7 +390,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
                             _details?['phone_number'] ??
                                 (isArabic
                                     ? "رقم الهاتف غير متوفر"
-                                    : 'ژمارەی مۆبایل نادیارە'),
+                                    : 'ژمارا مۆبایلی نەدیارە'),
                             style: TextStyle(
                               fontFamily: 'NotoKufi',
                               fontSize: 14,
@@ -482,7 +484,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          isArabic ? "الصور" : 'وێنەکان',
+          isArabic ? "الصور" : 'وێنە',
           style: TextStyle(
             fontFamily: 'NotoKufi',
             fontSize: 18,
@@ -578,7 +580,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          isArabic ? "تفاصيل ذات صلة" : 'پاشەکەوتەکان',
+          isArabic ? "تفاصيل ذات صلة" : 'پێزانین زێدەتر',
           style: TextStyle(
             fontFamily: 'NotoKufi',
             fontSize: 18,
@@ -610,7 +612,7 @@ class _WorkDetailsScreenState extends State<WorkDetailsScreen> {
         ? detail['images'][0]
         : 'https://via.placeholder.com/150';
     String name =
-        detail['name'] ?? (isArabic ? "اسم غير متوفر" : 'ناوی بەکارهێنەر');
+        detail['name'] ?? (isArabic ? "اسم غير متوفر" : 'ناڤێ بەکارهێنەری');
     String phoneNumber = detail['phone_number'] ??
         (isArabic ? "غير متوفر" : 'ژمارەی مۆبایل نادیارە');
     String location =

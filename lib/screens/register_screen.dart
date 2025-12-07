@@ -170,7 +170,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
           title: Text(
-            isArabic ? "تسجيل" : 'خۆتۆمارکردن',
+            isArabic ? "تسجيل" : 'خو تومار بکە',
             style: TextStyle(
                 fontFamily: 'NotoKufi', fontSize: 20, color: Colors.white),
           ),

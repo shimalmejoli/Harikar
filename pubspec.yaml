@@ -2,7 +2,7 @@ name: harikar
 description: "Harikar project."
 
 # 🔥 Updated version (Apple requires higher version)
-version: 1.0.1+1
+version: 1.0.1+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

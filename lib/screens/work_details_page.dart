@@ -488,7 +488,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            isArabic ? "تفاصيل العمل" : 'وردکاری کار',
+            isArabic ? "تفاصيل العمل" : 'زانیاری کاری',
             style: TextStyle(
               fontFamily: 'NotoKufi',
               fontWeight: FontWeight.bold,
@@ -616,7 +616,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
     return DropdownButtonFormField<String>(
       value: _selectedCity?.isEmpty == true ? null : _selectedCity,
       hint: Text(
-        isArabic ? "اختر مدينة" : 'هه‌موو شاران',
+        isArabic ? "اختر مدينة" : 'هەمی باژێر',
         style: TextStyle(fontFamily: 'NotoKufi'),
       ),
       decoration: InputDecoration(
@@ -627,7 +627,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
         DropdownMenuItem(
           value: '',
           child: Text(
-            isArabic ? "جميع المدن" : 'هه‌موو شاران',
+            isArabic ? "جميع المدن" : 'هەمی باژێر',
             style: TextStyle(fontFamily: 'NotoKufi'),
           ),
         ),
@@ -813,7 +813,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
           // Rows‐per‐page selector
           Row(
             children: [
-              Text(isArabic ? "عدد الصفوف:" : 'ژمارا رێسا:',
+              Text(isArabic ? "عدد الصفوف:" : 'ژمارا رێزا:',
                   style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 14,
@@ -846,7 +846,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
               Text(
                   isArabic
                       ? "صفحة $_currentPage/$_totalPages"
-                      : "پەڕە $_currentPage/$_totalPages",
+                      : "لاپەر $_currentPage/$_totalPages",
                   style: TextStyle(
                       fontFamily: 'NotoKufi',
                       fontSize: 14,

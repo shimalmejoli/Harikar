@@ -122,7 +122,7 @@ class CustomDrawer extends StatelessWidget {
         ),
         _buildMenuItem(
           icon: Icons.app_registration,
-          title: isArabic ? "التسجيل" : 'خۆتۆمارکردن',
+          title: isArabic ? "التسجيل" : 'خو توماربکە',
           onTap: () => Navigator.pushReplacementNamed(context, '/register'),
         ),
         Divider(),
@@ -181,7 +181,7 @@ class CustomDrawer extends StatelessWidget {
 
         _buildMenuItem(
           icon: Icons.exit_to_app,
-          title: isArabic ? "تسجيل الخروج" : 'دەرچوون',
+          title: isArabic ? "تسجيل الخروج" : 'چوونا دەرێ',
           onTap: () async {
             Provider.of<UserModel>(context, listen: false).clearUser();
             final prefs = await SharedPreferences.getInstance();
@@ -235,7 +235,7 @@ class CustomDrawer extends StatelessWidget {
 
         _buildMenuItem(
           icon: Icons.exit_to_app,
-          title: isArabic ? "تسجيل الخروج" : 'دەرچوون',
+          title: isArabic ? "تسجيل الخروج" : 'چوونا دەرێ',
           onTap: () async {
             Provider.of<UserModel>(context, listen: false).clearUser();
             final prefs = await SharedPreferences.getInstance();
@@ -253,7 +253,7 @@ class CustomDrawer extends StatelessWidget {
         ),
         _buildMenuItem(
           icon: Icons.app_registration,
-          title: isArabic ? "التسجيل" : 'خۆتۆمارکردن',
+          title: isArabic ? "التسجيل" : 'خو توماربکە',
           onTap: () => Navigator.pushReplacementNamed(context, '/register'),
         ),
         _buildMenuItem(
@@ -271,7 +271,7 @@ class CustomDrawer extends StatelessWidget {
         Divider(),
         _buildMenuItem(
           icon: Icons.login,
-          title: isArabic ? "تسجيل الدخول" : 'چوونە ژوورەوە',
+          title: isArabic ? "تسجيل الدخول" : 'چوونا ژور',
           onTap: () => Navigator.pushReplacementNamed(context, '/login'),
         ),
       ];
@@ -281,7 +281,7 @@ class CustomDrawer extends StatelessWidget {
     menuItems.add(Divider());
     menuItems.add(_buildMenuItem(
       icon: Icons.language,
-      title: isArabic ? "تغيير اللغة" : 'گۆڕینی زمان',
+      title: isArabic ? "تغيير اللغة" : 'گهورینا زمانی',
       onTap: () => _showLanguageDialog(context),
     ));
 

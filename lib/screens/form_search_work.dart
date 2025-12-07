@@ -175,7 +175,7 @@ class _FormSearchWorkState extends State<FormSearchWork> {
       "مساح": "مساح",
       "کەهرەبای": "كهربائي",
       "حاديله": "ضاغطة التربة",
-      "تانكەرێ ئاڤێ": "تنكر ماء",
+      "تانکەرا ئاڤا پاقژ": "تنكر ماء",
       "سلنگ": "كرين",
       "قەلابه": "قلاب",
       "گرێدەر": "آلات تسوية الطرق",
@@ -301,7 +301,7 @@ class _FormSearchWorkState extends State<FormSearchWork> {
 
   Widget _buildDropdownFilter(bool isArabic) => DropdownButtonFormField<String>(
         value: _selectedCategoryName,
-        hint: Text(isArabic ? "جميع الأقسام" : 'هەموو بەشەکان',
+        hint: Text(isArabic ? "جميع الأقسام" : 'هەمی بەش',
             style: TextStyle(fontFamily: 'NotoKufi')),
         decoration: InputDecoration(
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -310,7 +310,7 @@ class _FormSearchWorkState extends State<FormSearchWork> {
         items: [
           DropdownMenuItem<String>(
             value: null,
-            child: Text(isArabic ? "جميع الأقسام" : 'هەموو بەشەکان',
+            child: Text(isArabic ? "جميع الأقسام" : 'هەمی بەش ',
                 style: TextStyle(fontFamily: 'NotoKufi')),
           ),
           ..._categories.map((cat) {
