@@ -74,8 +74,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final Map<String, String> translations = {
       "ئەندازیار": "مهندس",
       "مەساح": "مساح",
-      "ئامیرە": "أدواة",
-      "هوستا": "وستا",
+      "ئامیرە": "معدات",
+      "هوستا": "اسطة",
       "کرێکار": "عمال",
       "مەواد": "مواد",
     };

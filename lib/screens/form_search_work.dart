@@ -221,7 +221,7 @@ class _FormSearchWorkState extends State<FormSearchWork> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            isArabic ? "البحث عن عمل" : 'گەڕانی کار',
+            isArabic ? "البحث عن عمل" : 'زانیاری کار',
             style: TextStyle(
               fontFamily: 'NotoKufi',
               fontWeight: FontWeight.bold,
