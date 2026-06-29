@@ -1,22 +1,26 @@
 // lib/screens/AdsManagementPage.dart
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:cached_network_image/cached_network_image.dart';
+
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
+import '../widgets/branded_app_bar.dart';
+import '../widgets/footer_menu.dart';
 import 'SelectDetailPage.dart';
-import '../widgets/footer_menu.dart'; // <-- add this
 
 class AdsManagementPage extends StatefulWidget {
+  const AdsManagementPage({Key? key}) : super(key: key);
+
   @override
   _AdsManagementPageState createState() => _AdsManagementPageState();
 }
 
 class _AdsManagementPageState extends State<AdsManagementPage> {
-  final String _fetchAdsUrl =
-      'https://legaryan.heama-soft.com/fetch_slideshow_details.php';
-  final String _updateAdsUrl =
-      'https://legaryan.heama-soft.com/update_ads_status.php';
-
   List<Map<String, dynamic>> _ads = [];
   List<Map<String, dynamic>> _filteredAds = [];
   bool _isLoading = true;
@@ -25,6 +29,7 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
   @override
   void initState() {
     super.initState();
+    AppLogger.info('AdsManagementPage init', tag: 'ADS');
     _fetchAds();
     _searchController.addListener(_onSearchChanged);
   }
@@ -39,110 +44,94 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
   void _onSearchChanged() {
     final q = _searchController.text.trim().toLowerCase();
     setState(() {
-      if (q.isEmpty) {
-        _filteredAds = List.from(_ads);
-      } else {
-        _filteredAds = _ads.where((item) {
-          final name = (item['name'] as String).toLowerCase();
-          final phone = (item['contact_number'] as String).toLowerCase();
-          return name.contains(q) || phone.contains(q);
-        }).toList();
-      }
+      _filteredAds = q.isEmpty
+          ? List.from(_ads)
+          : _ads.where((item) {
+              final name = (item['name'] as String).toLowerCase();
+              final phone = (item['contact_number'] as String).toLowerCase();
+              return name.contains(q) || phone.contains(q);
+            }).toList();
     });
   }
 
   Future<void> _fetchAds() async {
     setState(() => _isLoading = true);
-    try {
-      final resp = await http.get(Uri.parse(_fetchAdsUrl));
-      final body = json.decode(resp.body);
-      if (body['status'] == 'success') {
-        var list = (body['data'] as List).cast<Map<String, dynamic>>();
-        var adsList = list.map((item) {
-          return {
-            'id': item['id'].toString(),
-            'name': item['name'] ?? '',
-            'contact_number': item['phone_number'] ?? '',
-            'photo_url': item['photo_url'] ?? '',
-          };
-        }).toList();
-        if (adsList.length > 5) adsList = adsList.sublist(0, 5);
+    AppLogger.info('Fetching ads...', tag: 'ADS');
+
+    final response = await ApiService.instance.fetchSlideshow();
+    if (!mounted) return;
+
+    if (response.success && response.data != null) {
+      final list =
+          (response.data!['data'] as List? ?? []).cast<Map<String, dynamic>>();
+      var adsList = list
+          .map((item) => {
+                'id': item['id'].toString(),
+                'name': item['name'] ?? '',
+                'contact_number': item['phone_number'] ?? '',
+                'photo_url': item['photo_url'] ?? '',
+              })
+          .toList();
+      if (adsList.length > 5) adsList = adsList.sublist(0, 5);
+      AppLogger.info('Ads loaded: ${adsList.length}', tag: 'ADS');
+      setState(() {
         _ads = adsList;
         _filteredAds = List.from(_ads);
-      } else {
-        _ads = _filteredAds = [];
-      }
-    } catch (e) {
-      print("Error fetching ads: $e");
-      _ads = _filteredAds = [];
-    } finally {
-      setState(() => _isLoading = false);
+      });
+    } else {
+      AppLogger.error('Ads fetch failed: ${response.error}', tag: 'ADS');
+      setState(() {
+        _ads = [];
+        _filteredAds = [];
+      });
     }
+    setState(() => _isLoading = false);
   }
 
   Future<void> _deleteAd(String id) async {
-    final resp = await http.post(
-      Uri.parse(_updateAdsUrl),
-      body: {'id': id, 'ads': '0'},
+    AppLogger.info('Deleting ad id: $id', tag: 'ADS');
+
+    final response = await ApiService.instance.post(
+      AppConstants.updateAdsStatusEndpoint,
+      fields: {'id': id, 'ads': '0'},
     );
-    if (resp.statusCode == 200) {
+    if (!mounted) return;
+
+    if (response.success) {
+      AppLogger.info('Ad deleted: $id', tag: 'ADS');
       _fetchAds();
     } else {
-      final locale = Localizations.localeOf(context).languageCode;
-      final isArabic = locale == 'ar';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-          isArabic
-              ? 'فشل حذف الإعلان'
-              : 'خەلەتی د ژێبرنا ریکلامی دا', // Badini: Xaletî di jêbirna rîklamî da
-          style: const TextStyle(fontFamily: 'NotoKufi'),
-        )),
-      );
+      AppLogger.error('Delete ad failed: ${response.error}', tag: 'ADS');
+      _snack(S.adsDeleteFailed.of(context));
     }
   }
 
   void _confirmDelete(String id) {
-    final locale = Localizations.localeOf(context).languageCode;
-    final isArabic = locale == 'ar';
-
     showDialog(
       context: context,
-      builder: (_) => Directionality(
+      builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: Text(
-            isArabic
-                ? 'تأكيد الحذف'
-                : 'دڵنیابوون ژێبرنێ', // Badini: Dilnîyabûn jêbirnê
-            style: const TextStyle(fontFamily: 'NotoKufi'),
-          ),
-          content: Text(
-            isArabic
-                ? 'هل أنت متأكد أنك تريد حذف هذا الإعلان؟'
-                : 'دڵنیای ژێبرنا ڤی ریکلامی؟', // Badini: Dilnîyay jêbirna vî rîklamî?
-            style: const TextStyle(fontFamily: 'NotoKufi'),
-          ),
+          title: Text(S.adsConfirmDeleteTitle.of(ctx)),
+          content: Text(S.adsConfirmDeleteContent.of(ctx)),
           actions: [
             TextButton(
-              child: Text(
-                isArabic ? 'إلغاء' : 'هەلڤەشاندن', // Badini: Helveshandin
-                style: const TextStyle(fontFamily: 'NotoKufi'),
-              ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(S.adsCancelButton.of(ctx)),
             ),
-            TextButton(
-              child: Text(
-                isArabic ? 'حذف' : 'ژێبرن', // Badini: Jêbirn
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontFamily: 'NotoKufi',
-                ),
-              ),
+            ElevatedButton.icon(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.pop(ctx);
                 _deleteAd(id);
               },
+              icon: const Icon(Icons.delete_rounded, size: 16),
+              label: Text(S.adsDeleteButton.of(ctx)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.error,
+                minimumSize: const Size(0, 40),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
             ),
           ],
         ),
@@ -151,155 +140,251 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
   }
 
   Future<void> _addAd() async {
-    final locale = Localizations.localeOf(context).languageCode;
-    final isArabic = locale == 'ar';
-
     if (_ads.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-          isArabic
-              ? 'لا يمكن أن يكون هناك أكثر من 5 إعلانات.'
-              : 'ناهێت کرن پتر ژ ٥ ریکلامان هەبن.', // Badini: Nahêt kirin pîtir jî 5 rîklaman hebîn.
-          style: const TextStyle(fontFamily: 'NotoKufi'),
-        )),
-      );
+      _snack(S.adsLimitReached.of(context), color: Colors.orange);
       return;
     }
+
     final result = await Navigator.push<Map<String, dynamic>>(
-      context,
-      MaterialPageRoute(builder: (_) => SelectDetailPage()),
-    );
-    if (result != null && result.containsKey('id')) {
+        context, MaterialPageRoute(builder: (_) => SelectDetailPage()));
+
+    if (result != null && result.containsKey('id') && mounted) {
       final detailId = result['id'].toString();
-      final resp = await http.post(
-        Uri.parse(_updateAdsUrl),
-        body: {'id': detailId, 'ads': '1'},
+      AppLogger.info('Adding ad for detail: $detailId', tag: 'ADS');
+
+      final response = await ApiService.instance.post(
+        AppConstants.updateAdsStatusEndpoint,
+        fields: {'id': detailId, 'ads': '1'},
       );
-      if (resp.statusCode == 200)
+      if (!mounted) return;
+
+      if (response.success) {
+        AppLogger.info('Ad added successfully', tag: 'ADS');
         _fetchAds();
-      else
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-            isArabic
-                ? 'فشل إضافة الإعلان'
-                : 'خەلەتی د زێدەکرنا ریکلامی دا', // Badini: Xaletî di zêdekirina rîklamî da
-            style: const TextStyle(fontFamily: 'NotoKufi'),
-          )),
-        );
+      } else {
+        _snack(S.adsAddFailed.of(context));
+      }
     }
   }
 
+  void _snack(String msg, {Color? color}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: color ?? AppTheme.error,
+    ));
+  }
+
+  // ── BUILD ─────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final placeholder = isArabic
-        ? 'ابحث بالاسم أو رقم الهاتف'
-        : 'گەڕیان ب ناڤ یان ژمارێ'; // Badini: Gerrîyan b nav yan jimare
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.deepPurple,
-          iconTheme: const IconThemeData(color: Colors.white),
-          actionsIconTheme: const IconThemeData(color: Colors.white),
-          title: Container(
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: placeholder,
-                border: InputBorder.none,
-                hintStyle: const TextStyle(
-                  color: Colors.black45,
-                  fontFamily: 'NotoKufi',
+    return AppScaffold(
+      titleWidget: _buildSearchField(context),
+      actions: [
+        BrandedAppBarAction(
+          icon: Icons.add_rounded,
+          tooltip: S.adsAddTooltip.of(context),
+          onPressed: _addAd,
+        ),
+      ],
+      bottomNavigationBar: const FooterMenu(),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.accent))
+          : _filteredAds.isEmpty
+              ? _buildEmptyState(context)
+              : RefreshIndicator(
+                  onRefresh: _fetchAds,
+                  color: AppTheme.accent,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
+                    itemCount: _filteredAds.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => _buildAdCard(_filteredAds[i]),
+                  ),
                 ),
+    );
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(
+            color: Colors.white, fontFamily: 'NotoKufi', fontSize: 14),
+        cursorColor: Colors.white,
+        decoration: InputDecoration(
+          hintText: S.adsSearchHint.of(context),
+          hintStyle: const TextStyle(
+              color: Colors.white60, fontFamily: 'NotoKufi', fontSize: 13),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          prefixIcon: const Icon(Icons.search_rounded,
+              color: Colors.white70, size: 18),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.divider.withOpacity(0.5),
+                shape: BoxShape.circle,
               ),
-              style: const TextStyle(
-                color: Colors.black87,
-                fontFamily: 'NotoKufi',
-              ),
+              child: Icon(Icons.campaign_outlined,
+                  size: 40, color: AppTheme.textMuted),
             ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.add),
-              color: Colors.white,
-              onPressed: _addAd,
-              tooltip: isArabic
-                  ? 'إضافة إعلان'
-                  : 'زێدەکرنا ریکلامی', // Badini: Zêdekirina rîklamî
+            const SizedBox(height: 16),
+            Text(
+              S.adsEmpty.of(context),
+              style: AppTheme.bodyMedium.copyWith(color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 200,
+              child: ElevatedButton.icon(
+                onPressed: _addAd,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(S.adsAddTooltip.of(context)),
+              ),
             ),
           ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _filteredAds.isEmpty
-                ? Center(
-                    child: Text(
-                      isArabic
-                          ? 'لا توجد إعلانات'
-                          : 'چ ریکلام نینن', // Badini: Ç rîklam nînin
-                      style:
-                          const TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _filteredAds.length,
-                    itemBuilder: (ctx, i) {
-                      final ad = _filteredAds[i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 4,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              ad['photo_url'],
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.grey[300],
-                                width: 60,
-                                height: 60,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            ad['name'],
-                            style: const TextStyle(
-                              fontFamily: 'NotoKufi',
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            ad['contact_number'],
-                            style: const TextStyle(fontFamily: 'NotoKufi'),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete),
-                            color: Colors.redAccent,
-                            onPressed: () => _confirmDelete(ad['id']),
-                          ),
-                        ),
-                      );
-                    },
+      ),
+    );
+  }
+
+  Widget _buildAdCard(Map<String, dynamic> ad) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Row(
+        children: [
+          // Photo on the start side (right in RTL).
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(AppTheme.radiusMd),
+              bottomRight: Radius.circular(AppTheme.radiusMd),
+            ),
+            child: CachedNetworkImage(
+              imageUrl: ad['photo_url'],
+              width: 84,
+              height: 84,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                width: 84,
+                height: 84,
+                color: Colors.grey.shade100,
+              ),
+              errorWidget: (_, __, ___) => Container(
+                width: 84,
+                height: 84,
+                color: Colors.grey.shade100,
+                child: Icon(Icons.image_rounded,
+                    color: Colors.grey.shade400),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ad['name'],
+                    style: AppTheme.headingSmall.copyWith(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-        bottomNavigationBar:
-            FooterMenu(), // no args → selectedIndex defaults to –1
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.phone_rounded,
+                        size: 12, color: AppTheme.textMuted),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        ad['contact_number'],
+                        style: AppTheme.bodySmall.copyWith(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.campaign_rounded,
+                            size: 11, color: AppTheme.success),
+                        const SizedBox(width: 4),
+                        Text(
+                          S.adsActiveBadge.of(context),
+                          style: const TextStyle(
+                            fontFamily: 'NotoKufi',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.success,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Delete pill button
+          Padding(
+            padding: const EdgeInsets.only(right: 8, left: 8),
+            child: Material(
+              color: AppTheme.error.withOpacity(0.10),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => _confirmDelete(ad['id']),
+                child: const SizedBox(
+                  width: 38,
+                  height: 38,
+                  child: Icon(Icons.delete_outline_rounded,
+                      color: AppTheme.error, size: 20),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

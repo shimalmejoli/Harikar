@@ -1,396 +1,342 @@
 // lib/screens/feedback_screen.dart
 
 import 'package:flutter/material.dart';
+
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
 import '../services/feedback_service.dart';
-import 'dashboard_screen.dart'; // Import the DashboardScreen
+import '../widgets/app_scaffold.dart';
+import '../widgets/footer_menu.dart';
 
 class FeedbackScreen extends StatefulWidget {
+  const FeedbackScreen({Key? key}) : super(key: key);
+
   @override
   _FeedbackScreenState createState() => _FeedbackScreenState();
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _messageCtrl = TextEditingController();
 
   String _name = '';
   String _phoneNumber = '';
   String _message = '';
 
   bool _isSubmitting = false;
-  bool _showSuccessMessage = false; // New state variable
+  bool _showSuccessMessage = false;
 
-  final FeedbackService _feedbackService = FeedbackService();
+  static const int _maxMessageLength = 500;
 
-  // Method to handle form submission
+  @override
+  void initState() {
+    super.initState();
+    _messageCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _submitFeedback() async {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
+    if (!_formKey.currentState!.validate()) return;
+    _formKey.currentState!.save();
 
-      setState(() {
-        _isSubmitting = true;
-        _showSuccessMessage = false; // Reset success message on new submission
-      });
+    setState(() {
+      _isSubmitting = true;
+      _showSuccessMessage = false;
+    });
 
-      // Submit feedback via the service
-      Map<String, dynamic> response =
-          await _feedbackService.submitFeedback(_name, _phoneNumber, _message);
+    AppLogger.info('Submitting feedback from: $_name', tag: 'FEEDBACK');
 
-      setState(() {
-        _isSubmitting = false;
-      });
+    final response = await FeedbackService.instance
+        .submitFeedback(_name, _phoneNumber, _message);
 
-      // Determine the locale for feedback text
-      final bool isArabic =
-          Localizations.localeOf(context).languageCode == 'ar';
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
 
-      if (response['status'] == 'success') {
-        setState(() {
-          _showSuccessMessage = true; // Show success message
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isArabic
-                  ? "تم إرسال ملاحظاتك بنجاح!"
-                  : "فیدبەکەت بە سەرکەوتوویی نێردرا!",
-              style: TextStyle(fontFamily: 'NotoKufi'),
-            ),
-          ),
-        );
-        _formKey.currentState!.reset();
-      } else {
-        // If the message is an array (multiple errors), join them into a single string
-        String errorMessage = response['message'] is List
-            ? (response['message'] as List).join(' ')
-            : response['message'];
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(errorMessage, style: TextStyle(fontFamily: 'NotoKufi')),
-          ),
-        );
-      }
+    if (response['status'] == 'success') {
+      AppLogger.info('Feedback submitted successfully', tag: 'FEEDBACK');
+      setState(() => _showSuccessMessage = true);
+      _formKey.currentState!.reset();
+      _messageCtrl.clear();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(S.feedbackSubmitSnack.of(context)),
+        backgroundColor: AppTheme.success,
+      ));
+    } else {
+      final errMsg = response['message'] is List
+          ? (response['message'] as List).join(' ')
+          : response['message']?.toString() ?? 'Error';
+      AppLogger.error('Feedback failed: $errMsg', tag: 'FEEDBACK');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(errMsg),
+        backgroundColor: AppTheme.error,
+      ));
     }
   }
 
   void _navigateToDashboard() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => DashboardScreen()),
-    );
-    // Alternatively, use named routes if set up:
-    // Navigator.pushReplacementNamed(context, '/dashboard');
+    Navigator.pushReplacementNamed(context, '/dashboard');
   }
 
   @override
   Widget build(BuildContext context) {
-    // Determine the current language
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    // Obtain screen dimensions
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    return Directionality(
-      textDirection: TextDirection.rtl, // Enforce RTL
-      child: Scaffold(
-        appBar: AppBar(
-          flexibleSpace: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.deepPurple, Colors.blueAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          title: Text(
-            isArabic ? "الإبلاغ" : 'سکالا',
-            style: TextStyle(
-              fontFamily: 'NotoKufi',
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        body: SafeArea(
-          child: Container(
-            width: double.infinity,
-            height: screenHeight,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.white,
-                  Colors.blueAccent.withOpacity(0.1),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-            child: Column(
-              children: [
-                _buildHeaderSection(screenWidth, isArabic),
-                SizedBox(height: 20),
-                Expanded(
-                  child: SingleChildScrollView(child: _buildForm(isArabic)),
-                ),
-              ],
-            ),
-          ),
+    return AppScaffold(
+      title: S.feedbackTitle.of(context),
+      bottomNavigationBar: const FooterMenu(),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeroCard(context),
+            const SizedBox(height: 22),
+            if (_showSuccessMessage) ...[
+              _buildSuccessCard(context),
+              const SizedBox(height: 18),
+            ],
+            _buildForm(context),
+          ],
         ),
       ),
     );
   }
 
-  // Header Section similar to DashboardScreen
-  Widget _buildHeaderSection(double screenWidth, bool isArabic) {
+  // ── Hero card ──────────────────────────────────────────────
+
+  Widget _buildHeroCard(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.deepPurple, Colors.blueAccent],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
+        gradient: AppTheme.appBarGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.appBarShadow,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          Image.asset(
-            'assets/logo2.png',
-            height: 60,
-            fit: BoxFit.contain,
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              isArabic ? "صفحة الإبلاغ" : 'لاپەرێ سکالا',
-              style: TextStyle(
-                fontFamily: 'NotoKufi',
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 1.2,
-              ),
-              textAlign: TextAlign.right,
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.22),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white54, width: 1.5),
             ),
+            child: const Icon(Icons.forum_rounded,
+                size: 32, color: Colors.white),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            S.feedbackHeroTitle.of(context),
+            style: AppTheme.headingLarge.copyWith(fontSize: 18),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            S.feedbackHeroSubtitle.of(context),
+            style: AppTheme.captionWhite.copyWith(fontSize: 12),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  // Feedback Form
-  Widget _buildForm(bool isArabic) {
-    return Form(
-      key: _formKey,
+  // ── Success card ───────────────────────────────────────────
+
+  Widget _buildSuccessCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.success.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.success.withOpacity(0.30), width: 1),
+      ),
       child: Column(
         children: [
-          // Name Field
-          _buildTextField(
-            label: isArabic ? "الاسم" : 'ناڤ',
-            icon: Icons.person,
-            validatorMessage:
-                isArabic ? "يرجى إدخال اسمك" : "تکایە ناوی خۆت بنووسە",
-            keyboardType: TextInputType.name,
-            onSaved: (value) {
-              _name = value!.trim();
-            },
-          ),
-          SizedBox(height: 20),
-
-          // Phone Number Field
-          _buildTextField(
-            label: isArabic ? "رقم الجوال" : 'ژمارەی مۆبایلێ',
-            icon: Icons.phone,
-            validatorMessage:
-                isArabic ? "يرجى إدخال رقم الجوال" : "ژمارەی مۆبایل بنڤیسە",
-            keyboardType: TextInputType.phone,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return isArabic
-                    ? "يرجى إدخال رقم الجوال"
-                    : " ژمارەی مۆبایلێ بنڤیسە";
-              }
-              if (!RegExp(r'^\+?[0-9]{7,15}$').hasMatch(value.trim())) {
-                return isArabic
-                    ? "يرجى إدخال رقم جوال صحيح"
-                    : "ژمارەی مۆبایلێ دروست بنڤیسە";
-              }
-              return null;
-            },
-            onSaved: (value) {
-              _phoneNumber = value!.trim();
-            },
-          ),
-          SizedBox(height: 20),
-
-          // Message Field
-          _buildTextField(
-            label: isArabic ? "الرسالة" : 'پەیام',
-            icon: Icons.message,
-            validatorMessage:
-                isArabic ? "يرجى إدخال رسالتك" : " پەیاما خو ژی بنڤیسە",
-            maxLines: 5,
-            onSaved: (value) {
-              _message = value!.trim();
-            },
-          ),
-          SizedBox(height: 30),
-
-          // Submit Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isSubmitting ? null : _submitFeedback,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withOpacity(0.18),
+                  shape: BoxShape.circle,
                 ),
-                elevation: 5,
+                child: const Icon(Icons.check_circle_rounded,
+                    color: AppTheme.success, size: 22),
               ),
-              child: _isSubmitting
-                  ? SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Text(
-                      isArabic ? "إرسال" : 'هنارتن',
-                      style: TextStyle(
-                        fontFamily: 'NotoKufi',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-            ),
-          ),
-          SizedBox(height: 20),
-
-          // Success Message Card
-          if (_showSuccessMessage)
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              color: Colors.green[50],
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 30,
-                        ),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            isArabic
-                                ? "شكراً لملاحظاتك. سنعمل على حل المشكلة وسنتواصل معك في أقرب وقت."
-                                : "سپاسی بۆ فیدباکا هەوە. ئەم دێ ئاریشێ/کێشێ چارەسەر کەین و دێ د نێزیکترین دەم دا پەیوەندیێ ب هەوە کەین.",
-                            style: TextStyle(
-                              fontFamily: 'NotoKufi',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.green[800],
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      S.feedbackSuccessTitle.of(context),
+                      style: AppTheme.headingSmall.copyWith(
+                        color: AppTheme.success,
+                        fontSize: 14,
+                      ),
                     ),
-                    SizedBox(height: 20),
-                    // Back to Dashboard Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _navigateToDashboard,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 30, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          elevation: 3,
-                        ),
-                        child: Text(
-                          isArabic ? "العودة إلى الرئيسية" : 'زڤرین بۆ سەرەکی',
-                          style: TextStyle(
-                            fontFamily: 'NotoKufi',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                    const SizedBox(height: 4),
+                    Text(
+                      S.feedbackSuccessBody.of(context),
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                        height: 1.5,
                       ),
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _navigateToDashboard,
+              icon: const Icon(Icons.home_rounded, size: 18),
+              label: Text(S.feedbackBackHome.of(context)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.success,
+                side: const BorderSide(color: AppTheme.success, width: 1.4),
+              ),
             ),
+          ),
         ],
       ),
     );
   }
 
-  // Reusable Text Field Widget
-  Widget _buildTextField({
-    required String label,
-    required IconData icon,
-    String? Function(String?)? validator,
-    required String validatorMessage,
-    TextInputType keyboardType = TextInputType.text,
-    int maxLines = 1,
-    required Function(String?) onSaved,
-  }) {
-    return TextFormField(
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Colors.deepPurple),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+  // ── Form ───────────────────────────────────────────────────
+
+  Widget _buildForm(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.softShadow,
       ),
-      validator: validator ??
-          (value) {
-            if (value == null || value.trim().isEmpty) {
-              return validatorMessage;
-            }
-            return null;
-          },
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      onSaved: onSaved,
-      style: TextStyle(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _fieldLabel(S.feedbackNameLabel.of(context)),
+            const SizedBox(height: 6),
+            TextFormField(
+              decoration: InputDecoration(
+                hintText: S.feedbackNameHint.of(context),
+                prefixIcon:
+                    const Icon(Icons.person_rounded, color: AppTheme.primary),
+              ),
+              style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 14),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? S.feedbackNameRequired.of(context)
+                  : null,
+              onSaved: (v) => _name = v!.trim(),
+            ),
+            const SizedBox(height: 18),
+            _fieldLabel(S.feedbackPhoneLabel.of(context)),
+            const SizedBox(height: 6),
+            TextFormField(
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                hintText: '07XX XXX XXXX',
+                prefixIcon:
+                    Icon(Icons.phone_rounded, color: AppTheme.primary),
+              ),
+              style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 14),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
+                  return S.feedbackPhoneRequired.of(context);
+                }
+                if (!RegExp(r'^\+?[0-9]{7,15}$').hasMatch(v.trim())) {
+                  return S.feedbackPhoneInvalid.of(context);
+                }
+                return null;
+              },
+              onSaved: (v) => _phoneNumber = v!.trim(),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _fieldLabel(S.feedbackMessageLabel.of(context)),
+                Text(
+                  '${_messageCtrl.text.length}/$_maxMessageLength',
+                  style: AppTheme.bodySmall.copyWith(
+                    fontSize: 11,
+                    color: _messageCtrl.text.length > _maxMessageLength
+                        ? AppTheme.error
+                        : AppTheme.textMuted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _messageCtrl,
+              maxLines: 6,
+              maxLength: _maxMessageLength,
+              decoration: InputDecoration(
+                hintText: S.feedbackMessageHint.of(context),
+                alignLabelWithHint: true,
+                counterText: '',
+              ),
+              style: const TextStyle(
+                fontFamily: 'NotoKufi',
+                fontSize: 14,
+                height: 1.5,
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? S.feedbackMessageRequired.of(context)
+                  : null,
+              onSaved: (v) => _message = v!.trim(),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              height: AppTheme.buttonHeight,
+              child: ElevatedButton.icon(
+                onPressed: _isSubmitting ? null : _submitFeedback,
+                icon: _isSubmitting
+                    ? const SizedBox.shrink()
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: _isSubmitting
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(S.feedbackSubmit.of(context)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fieldLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
         fontFamily: 'NotoKufi',
-        fontSize: 16,
-        color: Colors.black87,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppTheme.textPrimary,
       ),
     );
   }

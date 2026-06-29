@@ -1,18 +1,21 @@
 // lib/screens/form_search_work.dart
 
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // ← new
-import '../widgets/custom_drawer.dart';
-import 'work_details_page.dart';
-import '../models/user_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../main.dart' show LocaleContext;
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
 import '../widgets/footer_menu.dart';
+import 'work_details_page.dart';
 
 class FormSearchWork extends StatefulWidget {
   final int? initialCategoryId;
-  FormSearchWork({this.initialCategoryId});
+  const FormSearchWork({this.initialCategoryId, Key? key}) : super(key: key);
 
   @override
   _FormSearchWorkState createState() => _FormSearchWorkState();
@@ -24,154 +27,137 @@ class _FormSearchWorkState extends State<FormSearchWork> {
   String? _selectedCategoryName;
   bool _isLoading = true;
   bool _showDropdown = true;
-
-  final String baseUrl = "https://legaryan.heama-soft.com/uploads/";
-  final String categoriesApi =
-      "https://legaryan.heama-soft.com/get_categories.php";
-  final String subcategoriesApi =
-      "https://legaryan.heama-soft.com/get_subcategories.php";
-
-  final List<Color> _categoryColors = [
-    Colors.white,
-    Colors.white,
-    Colors.white,
-    Colors.white,
-    Colors.white,
-  ];
-
   bool _didFetchData = false;
   Locale? _currentLocale;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Locale newLocale = Localizations.localeOf(context);
+    final newLocale = Localizations.localeOf(context);
     if (_currentLocale == null || _currentLocale != newLocale) {
       _currentLocale = newLocale;
       _didFetchData = false;
     }
     if (!_didFetchData) {
-      _fetchCategoriesAndSubcategories().then((_) {
-        if (widget.initialCategoryId != null) {
-          _setInitialCategory(widget.initialCategoryId!);
-          setState(() => _showDropdown = false);
-        }
-      });
       _didFetchData = true;
+      _fetchData().then((_) {
+        if (!mounted || widget.initialCategoryId == null) return;
+
+        // Shortcut: if the chosen category has exactly one active
+        // subcategory, skip this list screen and jump straight to
+        // its work-details page. pushReplacement so Back returns
+        // to the dashboard, not to a single-item list.
+        final activeSubs = (_subcategories[widget.initialCategoryId] ?? [])
+            .where((s) => s['is_active'] == true)
+            .toList();
+
+        if (activeSubs.length == 1) {
+          final only = activeSubs.first;
+          AppLogger.info(
+              'Single subcategory — auto-opening: ${only['name']}',
+              tag: 'SEARCH');
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  WorkDetailsPage(subcategoryId: only['id'].toString()),
+            ),
+          );
+          return;
+        }
+
+        _setInitialCategory(widget.initialCategoryId!);
+        setState(() => _showDropdown = false);
+      });
     }
   }
 
-  Future<void> _fetchCategoriesAndSubcategories() async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
+  Future<void> _fetchData() async {
     setState(() => _isLoading = true);
+    AppLogger.info('Fetching categories + subcategories', tag: 'SEARCH');
 
-    try {
-      final responses = await Future.wait([
-        http.get(Uri.parse(categoriesApi)),
-        http.get(Uri.parse(subcategoriesApi)),
-      ]);
+    final results = await Future.wait([
+      ApiService.instance.fetchCategories(),
+      ApiService.instance.fetchSubcategories(),
+    ]);
 
-      final categoriesJson = json.decode(responses[0].body);
-      final subcategoriesJson = json.decode(responses[1].body);
+    if (!mounted) return;
 
-      if (categoriesJson['status'] == 'success' &&
-          subcategoriesJson['status'] == 'success') {
-        // --- Categories ---
-        List cats = categoriesJson['data'];
-        _categories = cats
-            .where((c) => c['is_active'] == "1")
-            .toList()
-            .asMap()
-            .entries
-            .map((entry) {
-          int idx = entry.key;
-          var c = entry.value;
-          return {
-            "id": int.parse(c['id']),
-            "name": c['name'],
-            "original_name": c['name'],
-            "color": _categoryColors[idx % _categoryColors.length],
-          };
-        }).toList();
-        _applyCategoryTranslation();
+    final catResp = results[0];
+    final subResp = results[1];
 
-        // --- Subcategories ---
-        List subs = subcategoriesJson['data'];
-        _subcategories = {};
-        for (var s in subs) {
-          int catId = int.parse(s['category_id']);
-          _subcategories.putIfAbsent(catId, () => []);
-          _subcategories[catId]!.add({
-            "id": s['id'],
-            "name": s['name'],
-            "original_name": s['name'],
-            "image_url": "$baseUrl${s['image_url']}",
-            "is_active": s['is_active'] == "1",
-          });
-        }
-        _applySubcategoryTranslation();
+    if (catResp.success && subResp.success) {
+      final cats = catResp.data!['data'] as List? ?? [];
+      final subs = subResp.data!['data'] as List? ?? [];
+      AppLogger.info('Loaded ${cats.length} cats, ${subs.length} subs',
+          tag: 'SEARCH');
 
-        // --- Prefetch all subcategory images ---
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _subcategories.values.expand((list) => list).forEach((sub) {
-            precacheImage(
-              NetworkImage(sub['image_url']),
-              context,
-            );
-          });
+      _categories = cats
+          .where((c) => c['is_active'].toString() == '1')
+          .map<Map<String, dynamic>>((c) => {
+                'id': int.tryParse(c['id'].toString()) ?? 0,
+                'name': c['name'],
+                'original_name': c['name'],
+              })
+          .toList();
+      _applyCategoryTranslation();
+
+      _subcategories = {};
+      for (var s in subs) {
+        final catId = int.tryParse(s['category_id'].toString()) ?? 0;
+        _subcategories.putIfAbsent(catId, () => []);
+        _subcategories[catId]!.add({
+          'id': s['id'],
+          'name': s['name'],
+          'original_name': s['name'],
+          'image_url': '${AppConstants.uploadsUrl}${s['image_url']}',
+          'is_active': s['is_active'].toString() == '1',
         });
-      } else {
-        throw Exception("Failed to load data");
       }
-    } catch (e) {
-      print("Error fetching data: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isArabic
-                ? "فشل تحميل البيانات. حاول مرة أخرى لاحقاً."
-                : "Error fetching data. Please try again later.",
-            style: TextStyle(fontFamily: 'NotoKufi'),
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      _applySubcategoryTranslation();
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _subcategories.values.expand((l) => l).forEach((sub) {
+          precacheImage(NetworkImage(sub['image_url']), context);
+        });
+      });
+    } else {
+      AppLogger.error('Fetch failed: ${catResp.error}', tag: 'SEARCH');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(S.searchWorkLoadError.of(context)),
+          backgroundColor: AppTheme.error,
+        ));
+      }
     }
+
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _applyCategoryTranslation() {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final Map<String, String> translations = {
+    final isArabic = context.isArabic;
+    const t = {
       "ئەندازیار": "مهندس",
       "مەساح": "مساح",
       "ئامیرە": "مكائن",
       "هوستا": "اسطة",
-      "کرێکار": "عامل",
+      "کرێکار": "عامل"
     };
     setState(() {
       _categories = _categories.map((cat) {
         final orig = cat['original_name'].toString().trim();
-        cat['name'] = isArabic && translations.containsKey(orig)
-            ? translations[orig]!
-            : orig;
+        cat['name'] = (isArabic && t.containsKey(orig)) ? t[orig]! : orig;
         return cat;
       }).toList();
     });
   }
 
   void _applySubcategoryTranslation() {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-
-    final Map<String, String> translations = {
-      // Existing
+    final isArabic = context.isArabic;
+    const t = {
       "شەڤەر": "شفل",
       "کرێکار": "عمال",
       "نەجار": "نجار",
-
-      // New ones you asked
-
       "مساح": "مساح",
       "کەهرەبای": "كهربائي",
       "حاديله": "ضاغطة التربة",
@@ -187,220 +173,239 @@ class _FormSearchWorkState extends State<FormSearchWork> {
       "سەقف مەخربی": "صقف مغربي",
       "فلين": "فلين خارجي",
       "حداد": "حداد",
-      "مجاري": "مجاري"
+      "مجاري": "مجاري",
     };
     setState(() {
-      _subcategories.forEach((catId, list) {
+      _subcategories.forEach((_, list) {
         for (var sub in list) {
           final orig = sub['original_name'].toString().trim();
-          sub['name'] = (isArabic && translations.containsKey(orig))
-              ? translations[orig]!
-              : orig;
+          sub['name'] = (isArabic && t.containsKey(orig)) ? t[orig]! : orig;
         }
       });
     });
   }
 
-  void _setInitialCategory(int categoryId) {
-    final cat = _categories.firstWhere(
-      (c) => c['id'] == categoryId,
-      orElse: () => {},
-    );
-    if (cat.isNotEmpty) {
-      setState(() => _selectedCategoryName = cat['name']);
-    }
+  void _setInitialCategory(int id) {
+    final cat = _categories.firstWhere((c) => c['id'] == id, orElse: () => {});
+    if (cat.isNotEmpty) setState(() => _selectedCategoryName = cat['name']);
   }
+
+  // ── BUILD ────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final user = Provider.of<UserModel>(context, listen: false);
+    return AppScaffold(
+      title: S.searchWorkAppBarTitle.of(context),
+      bottomNavigationBar: const FooterMenu(),
+      body: _isLoading ? _buildLoading(context) : _buildContent(context),
+    );
+  }
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            isArabic ? "البحث عن عمل" : 'زانیاری کار',
-            style: TextStyle(
-              fontFamily: 'NotoKufi',
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-              color: Colors.white,
-            ),
+  Widget _buildLoading(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(gradient: AppTheme.loadingGradient),
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const CircularProgressIndicator(color: AppTheme.accent),
+          const SizedBox(height: 16),
+          Text(
+            S.searchWorkLoadingData.of(context),
+            style: AppTheme.bodySmall.copyWith(fontSize: 14),
           ),
-          flexibleSpace: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.deepPurple, Colors.blueAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        drawer: CustomDrawer(),
-        body: _isLoading
-            ? _buildLoadingState(isArabic)
-            : Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Color.fromARGB(255, 245, 244, 244),
-                child: Column(
-                  children: [
-                    if (_showDropdown)
-                      Padding(
-                        padding: EdgeInsets.all(12),
-                        child: _buildDropdownFilter(isArabic),
-                      ),
-                    Expanded(child: _buildCategoryList(isArabic)),
-                  ],
-                ),
-              ),
-        bottomNavigationBar:
-            FooterMenu(), // no args → selectedIndex defaults to –1
+        ]),
       ),
     );
   }
 
-  Widget _buildLoadingState(bool isArabic) => Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.white,
-              Colors.blueAccent.withOpacity(0.1),
-              Colors.deepPurple.withOpacity(0.05),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(
-                isArabic
-                    ? "جاري تحميل البيانات..."
-                    : 'جارى باركردنى زانیاریەکان...',
-                style: TextStyle(
-                  fontFamily: 'NotoKufi',
-                  fontSize: 16,
-                  color: Colors.black54,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  Widget _buildDropdownFilter(bool isArabic) => DropdownButtonFormField<String>(
-        value: _selectedCategoryName,
-        hint: Text(isArabic ? "جميع الأقسام" : 'هەمی بەش',
-            style: TextStyle(fontFamily: 'NotoKufi')),
-        decoration: InputDecoration(
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-        ),
-        items: [
-          DropdownMenuItem<String>(
-            value: null,
-            child: Text(isArabic ? "جميع الأقسام" : 'هەمی بەش ',
-                style: TextStyle(fontFamily: 'NotoKufi')),
-          ),
-          ..._categories.map((cat) {
-            return DropdownMenuItem<String>(
-              value: cat['name'],
-              child:
-                  Text(cat['name'], style: TextStyle(fontFamily: 'NotoKufi')),
-            );
-          }).toList(),
-        ],
-        onChanged: (v) => setState(() => _selectedCategoryName = v),
-      );
-
-  Widget _buildCategoryList(bool isArabic) {
+  Widget _buildContent(BuildContext context) {
     final filtered = _selectedCategoryName == null
         ? _categories
-        : _categories.where((c) => c['name'] == _selectedCategoryName).toList();
-    if (filtered.isEmpty) {
-      return Center(
-        child: Text(
-          isArabic ? "لا توجد أقسام متاحة." : 'هیچ بەشی بەردەست نیە.',
-          style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
+        : _categories
+            .where((c) => c['name'] == _selectedCategoryName)
+            .toList();
+
+    return Column(children: [
+      if (_showDropdown) _buildCategoryFilter(context),
+      Expanded(
+        child: filtered.isEmpty
+            ? _buildEmptyState(
+                context, S.searchWorkNoSections.of(context))
+            : RefreshIndicator(
+                onRefresh: _fetchData,
+                color: AppTheme.accent,
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) => _buildCategoryCard(filtered[i]),
+                ),
+              ),
+      ),
+    ]);
+  }
+
+  // ── Category filter dropdown (sits above the list) ─────────
+
+  Widget _buildCategoryFilter(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          boxShadow: AppTheme.softShadow,
         ),
-      );
-    }
-    return RefreshIndicator(
-      onRefresh: _fetchCategoriesAndSubcategories,
-      child: ListView.builder(
-        itemCount: filtered.length,
-        itemBuilder: (_, i) => _buildCategoryCard(filtered[i], isArabic),
+        child: DropdownButtonFormField<String>(
+          value: _selectedCategoryName,
+          isExpanded: true,
+          icon: const Padding(
+            padding: EdgeInsets.only(left: 6),
+            child: Icon(Icons.keyboard_arrow_down_rounded,
+                color: AppTheme.textMuted),
+          ),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.filter_list_rounded,
+                color: AppTheme.primary, size: 20),
+            hintText: S.searchWorkAllSections.of(context),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            filled: false,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          ),
+          items: [
+            DropdownMenuItem<String>(
+              value: null,
+              child: Text(S.searchWorkAllSections.of(context),
+                  style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 14)),
+            ),
+            ..._categories.map((cat) => DropdownMenuItem<String>(
+                  value: cat['name'],
+                  child: Text(cat['name'],
+                      style: const TextStyle(
+                          fontFamily: 'NotoKufi', fontSize: 14)),
+                )),
+          ],
+          onChanged: (v) => setState(() => _selectedCategoryName = v),
+        ),
       ),
     );
   }
 
-  Widget _buildCategoryCard(Map<String, dynamic> category, bool isArabic) {
-    final subs = _subcategories[category['id']] ?? [];
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      padding: EdgeInsets.only(left: 12, right: 12, bottom: 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            category['color']!.withOpacity(0.7),
-            category['color']!.withOpacity(0.9),
+  Widget _buildEmptyState(BuildContext context, String text) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.divider.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.search_off_rounded,
+                  size: 40, color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 16),
+            Text(text,
+                style: AppTheme.bodyMedium.copyWith(color: AppTheme.textMuted)),
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+  }
+
+  // ── Category card (gradient header + sub-grid body) ────────
+
+  Widget _buildCategoryCard(Map<String, dynamic> category) {
+    final subs = _subcategories[category['id']] ?? [];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(
-              category['name'],
-              style: TextStyle(
-                fontFamily: 'NotoKufi',
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueAccent,
+          // Header — gradient bar with icon + name + count badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: AppTheme.appBarGradient,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AppTheme.radiusLg),
+                topRight: Radius.circular(AppTheme.radiusLg),
               ),
             ),
+            child: Row(children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.22),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.category_rounded,
+                    color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  category['name'],
+                  style: AppTheme.headingLarge.copyWith(fontSize: 15),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.22),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                ),
+                child: Text(
+                  subs.length.toString(),
+                  style: const TextStyle(
+                    fontFamily: 'NotoKufi',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ]),
           ),
-          Divider(color: Colors.blueAccent),
+          // Body — grid of subcategories
           Padding(
-            padding: EdgeInsets.all(8),
+            padding: const EdgeInsets.all(12),
             child: subs.isEmpty
-                ? Center(
-                    child: Text(
-                      isArabic
-                          ? "لا توجد بيانات متاحة."
-                          : 'هیچ زانیاریەکی بەردەست نیە.',
-                      style: TextStyle(
-                        fontFamily: 'NotoKufi',
-                        fontSize: 14,
-                        color: Colors.white70,
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: Text(
+                        S.searchWorkNoData.of(context),
+                        style: AppTheme.bodySmall,
                       ),
                     ),
                   )
                 : GridView.builder(
                     shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: subs.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
-                      childAspectRatio: 0.8,
+                      childAspectRatio: 0.74,
                     ),
                     itemBuilder: (_, idx) => _buildSubcategoryCard(subs[idx]),
                   ),
@@ -410,88 +415,104 @@ class _FormSearchWorkState extends State<FormSearchWork> {
     );
   }
 
-  Widget _buildSubcategoryCard(Map<String, dynamic> sub) {
-    bool isActive = sub['is_active'] ?? true;
-    double imageSize = MediaQuery.of(context).size.width * 0.2;
+  // ── Subcategory tile ──────────────────────────────────────
 
-    return GestureDetector(
-      onTap: !isActive
-          ? null
-          : () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => WorkDetailsPage(
-                    subcategoryId: sub['id'].toString(),
-                  ),
-                ),
-              );
-            },
-      child: Container(
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white : Colors.grey.shade300,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: isActive ? Colors.grey.shade300 : Colors.transparent,
-              blurRadius: 8,
-              offset: Offset(0, 4),
+  Widget _buildSubcategoryCard(Map<String, dynamic> sub) {
+    final bool isActive = sub['is_active'] as bool? ?? true;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        onTap: isActive
+            ? () {
+                AppLogger.info('Subcategory: ${sub['name']}', tag: 'SEARCH');
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          WorkDetailsPage(subcategoryId: sub['id'].toString()),
+                    ));
+              }
+            : null,
+        child: Opacity(
+          opacity: isActive ? 1.0 : 0.45,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppTheme.background,
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              border: Border.all(
+                color: isActive
+                    ? AppTheme.cardBlue.withOpacity(0.30)
+                    : AppTheme.divider,
+                width: 1,
+              ),
             ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // ← using CachedNetworkImage now
-                  CachedNetworkImage(
-                    imageUrl: sub['image_url'],
-                    height: imageSize,
-                    width: imageSize,
-                    fit: BoxFit.cover,
-                    placeholder: (ctx, url) => SizedBox(
-                      height: imageSize,
-                      width: imageSize,
-                      child: Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: CachedNetworkImage(
+                            imageUrl: sub['image_url'],
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                            placeholder: (_, __) => const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: AppTheme.accent),
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Icon(
+                                Icons.category_rounded,
+                                size: 36,
+                                color: Colors.grey.shade400),
+                            fadeInDuration: const Duration(milliseconds: 200),
+                          ),
+                        ),
                       ),
-                    ),
-                    errorWidget: (ctx, url, err) => Icon(
-                      Icons.broken_image,
-                      size: imageSize,
-                      color: Colors.grey,
-                    ),
-                    fadeInDuration: Duration(milliseconds: 200),
+                      const SizedBox(height: 5),
+                      Text(
+                        sub['name'] ?? '',
+                        style: const TextStyle(
+                          fontFamily: 'NotoKufi',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    sub['name'],
-                    style: TextStyle(
-                      fontFamily: 'NotoKufi',
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isActive ? Colors.black87 : Colors.black45,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            if (!isActive)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Icon(
-                  Icons.lock,
-                  color: Colors.redAccent,
-                  size: 16,
                 ),
-              ),
-          ],
+                if (!isActive)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: AppTheme.softShadow,
+                      ),
+                      child: const Icon(Icons.lock_rounded,
+                          color: AppTheme.error, size: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

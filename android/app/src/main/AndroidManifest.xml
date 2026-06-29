@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for all network access (API calls, image loading) in release builds. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Harikar"
         android:name="${applicationName}"

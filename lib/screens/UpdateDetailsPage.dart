@@ -1,14 +1,25 @@
+// lib/screens/UpdateDetailsPage.dart
+
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart'; // For kIsWeb
+import 'package:image_picker/image_picker.dart';
+
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../main.dart' show LocaleContext;
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
 
 class UpdateDetailsPage extends StatefulWidget {
   final String detailId;
-
-  UpdateDetailsPage({required this.detailId});
+  const UpdateDetailsPage({required this.detailId, Key? key}) : super(key: key);
 
   @override
   _UpdateDetailsPageState createState() => _UpdateDetailsPageState();
@@ -17,510 +28,534 @@ class UpdateDetailsPage extends StatefulWidget {
 class _UpdateDetailsPageState extends State<UpdateDetailsPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _contactController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _additionalInfoController =
-      TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _contactCtrl = TextEditingController();
+  final _locationCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _additionalCtrl = TextEditingController();
 
-  // Dropdown Data
   List<dynamic> _subCategories = [];
   List<dynamic> _users = [];
-  List<String> _cities = ['دهۆک', 'زاخۆ', 'سلێمانی', 'هەولێر'];
+  final List<String> _cities = AppConstants.cities;
 
-  // Selected Values
   String? _selectedSubCategory;
   String? _selectedUser;
   String? _selectedCity;
   bool _isActive = true;
-
-  // Images
-  List<String> _existingImages = [];
-  List<dynamic> _newImages = []; // Can be File or Uint8List
-  final ImagePicker _picker = ImagePicker();
-
   bool _isSubmitting = false;
+
+  List<String> _existingImages = [];
+  final List<dynamic> _newImages = []; // File or Uint8List
 
   @override
   void initState() {
     super.initState();
+    AppLogger.info('UpdateDetailsPage — id: ${widget.detailId}',
+        tag: 'UPDATE_DETAIL');
     _fetchSubCategories();
     _fetchUsers();
     _fetchDetailData();
   }
 
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _contactCtrl.dispose();
+    _locationCtrl.dispose();
+    _descCtrl.dispose();
+    _additionalCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchSubCategories() async {
-    final url =
-        Uri.parse('https://legaryan.heama-soft.com/get_subcategories.php');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        setState(() {
-          _subCategories = jsonDecode(response.body)['data'];
-        });
-      }
-    } catch (e) {
-      _showMessage("Failed to load subcategories.",
-          success: false, arabicMessage: "فشل تحميل الفئات الفرعية.");
+    final r = await ApiService.instance.fetchSubcategories();
+    if (!mounted) return;
+    if (r.success) {
+      setState(() => _subCategories = r.data!['data'] as List? ?? []);
     }
   }
 
   Future<void> _fetchUsers() async {
-    final url = Uri.parse('https://legaryan.heama-soft.com/get_users.php');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        setState(() {
-          _users = jsonDecode(response.body)['data'];
-        });
-      }
-    } catch (e) {
-      _showMessage("Failed to load users.",
-          success: false, arabicMessage: "فشل تحميل المستخدمين.");
-    }
+    final r = await ApiService.instance.get(AppConstants.getUsersEndpoint);
+    if (!mounted) return;
+    if (r.success) setState(() => _users = r.data!['data'] as List? ?? []);
   }
 
   Future<void> _fetchDetailData() async {
-    final url =
-        Uri.parse('https://legaryan.heama-soft.com/get_detail_by_id.php');
-    final response = await http.post(url, body: {'id': widget.detailId});
+    AppLogger.info('Fetching detail data: ${widget.detailId}',
+        tag: 'UPDATE_DETAIL');
+    final r = await ApiService.instance.post(
+      AppConstants.getDetailByIdEndpoint,
+      fields: {'id': widget.detailId},
+    );
+    if (!mounted) return;
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body)['data'];
+    if (r.success && r.data != null) {
+      final data = r.data!['data'] as Map<String, dynamic>? ?? {};
+      AppLogger.info('Detail loaded: ${data['name']}', tag: 'UPDATE_DETAIL');
       setState(() {
-        _nameController.text = data['name'] ?? '';
-        _contactController.text = data['contact_number'] ?? '';
-        _locationController.text = data['location'] ?? '';
-        _descriptionController.text = data['description'] ?? '';
-        _additionalInfoController.text = data['additional_info'] ?? '';
-        _isActive = (data['is_active']?.toString() == '1');
-        _selectedSubCategory = data['sub_category_id']?.toString() ?? null;
-        _selectedUser = data['user_id']?.toString() ?? null;
-
-        // Set selected city if available
-        if (_cities.contains(data['location'])) {
-          _selectedCity = data['location'];
-        } else {
-          _selectedCity = null;
-        }
+        _nameCtrl.text = data['name'] ?? '';
+        _contactCtrl.text = data['contact_number'] ?? '';
+        _locationCtrl.text = data['location'] ?? '';
+        _descCtrl.text = data['description'] ?? '';
+        _additionalCtrl.text = data['additional_info'] ?? '';
+        _isActive = data['is_active']?.toString() == '1';
+        _selectedSubCategory = data['sub_category_id']?.toString();
+        _selectedUser = data['user_id']?.toString();
+        _selectedCity =
+            _cities.contains(data['location']) ? data['location'] : null;
         _existingImages = List<String>.from(data['images'] ?? []);
       });
     } else {
-      _showMessage("Failed to load details.",
-          success: false, arabicMessage: "فشل تحميل المعلومات.");
+      AppLogger.error('Fetch detail failed: ${r.error}', tag: 'UPDATE_DETAIL');
     }
   }
 
   Future<void> _pickImages() async {
-    final List<XFile>? pickedImages = await _picker.pickMultiImage();
-
-    if (pickedImages != null) {
-      for (var xFile in pickedImages) {
-        if (kIsWeb) {
-          final bytes = await xFile.readAsBytes();
-          setState(() {
-            _newImages.add(bytes); // Add as Uint8List for web
-          });
-        } else {
-          setState(() {
-            _newImages.add(File(xFile.path));
-          });
-        }
+    final files = await ImagePicker().pickMultiImage();
+    for (var f in files) {
+      if (kIsWeb) {
+        final bytes = await f.readAsBytes();
+        setState(() => _newImages.add(bytes));
+      } else {
+        setState(() => _newImages.add(File(f.path)));
       }
     }
   }
 
-  void _removeExistingImage(String imageUrl) {
-    setState(() => _existingImages.remove(imageUrl));
-  }
+  void _removeNewImage(int i) => setState(() => _newImages.removeAt(i));
+  void _removeExistingImage(String url) => _deleteExistingImage(url);
 
-  void _removeNewImage(int index) {
-    setState(() => _newImages.removeAt(index));
+  Future<void> _deleteExistingImage(String url) async {
+    AppLogger.info('Deleting existing image: $url', tag: 'UPDATE_DETAIL');
+    final r = await ApiService.instance
+        .post(AppConstants.deleteImageEndpoint, fields: {'image_url': url});
+    if (!mounted) return;
+    if (r.success) {
+      setState(() => _existingImages.remove(url));
+      _snack(S.updateDetailsImageDeleted.of(context), success: true);
+    } else {
+      _snack(r.error ?? 'Error');
+    }
   }
 
   Future<void> _updateData() async {
     if (!_formKey.currentState!.validate()) return;
+    final isArabic = context.isArabic;
     setState(() => _isSubmitting = true);
-
-    final url = Uri.parse('https://legaryan.heama-soft.com/update_details.php');
-    final request = http.MultipartRequest('POST', url);
+    AppLogger.info('Updating detail: ${widget.detailId}', tag: 'UPDATE_DETAIL');
 
     try {
-      // Add form fields
+      final request = http.MultipartRequest(
+          'POST', Uri.parse(AppConstants.updateDetailsEndpoint));
+
       request.fields['id'] = widget.detailId;
       request.fields['sub_category_id'] = _selectedSubCategory ?? '';
       request.fields['user_id'] = _selectedUser ?? '';
-      request.fields['name'] = _nameController.text.trim();
-      request.fields['contact_number'] = _contactController.text.trim();
+      request.fields['name'] = _nameCtrl.text.trim();
+      request.fields['contact_number'] = _contactCtrl.text.trim();
       request.fields['location'] = _selectedCity ?? '';
-      request.fields['description'] = _descriptionController.text.trim();
+      request.fields['description'] = _descCtrl.text.trim();
       request.fields['is_active'] = _isActive ? '1' : '0';
-      request.fields['additional_info'] = _additionalInfoController.text.trim();
+      request.fields['additional_info'] = _additionalCtrl.text.trim();
       request.fields['existing_images'] = jsonEncode(_existingImages);
 
-      print("Request Fields: ${request.fields}");
-
-      // Add new images if any
-      for (var image in _newImages) {
-        if (kIsWeb && image is Uint8List) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'images[]',
-              image,
-              filename: '${DateTime.now().millisecondsSinceEpoch}.jpg',
-            ),
-          );
-        } else if (image is File) {
-          request.files.add(
-            await http.MultipartFile.fromPath('images[]', image.path),
-          );
+      for (var img in _newImages) {
+        if (kIsWeb && img is Uint8List) {
+          request.files.add(http.MultipartFile.fromBytes('images[]', img,
+              filename: '${DateTime.now().millisecondsSinceEpoch}.jpg'));
+        } else if (img is File) {
+          request.files
+              .add(await http.MultipartFile.fromPath('images[]', img.path));
         }
       }
 
-      print("Sending update request...");
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
+      final resp = await request.send();
+      final body = await resp.stream.bytesToString();
+      final decoded = jsonDecode(body);
 
-      print("Response status: ${response.statusCode}");
-      print("Response body: $responseBody");
+      if (!mounted) return;
 
-      final responseData = jsonDecode(responseBody);
-      if (response.statusCode == 200 && responseData['status'] == 'success') {
-        _showMessage("Data updated successfully",
-            success: true, arabicMessage: "تم تحديث المعلومات بنجاح");
-        Navigator.pop(context); // Trigger return to previous screen
+      if (resp.statusCode == 200 && decoded['status'] == 'success') {
+        AppLogger.info('Detail updated successfully', tag: 'UPDATE_DETAIL');
+        _snack(S.updateDetailsSuccess.of(context), success: true);
+        Navigator.pop(context);
       } else {
-        print("Server Error: ${responseData['message']}");
-        _showMessage("Error: ${responseData['message']}",
-            success: false, arabicMessage: "خطأ: ${responseData['message']}");
-      }
-    } catch (e, stackTrace) {
-      print("Error occurred: $e");
-      print("Stack Trace: $stackTrace");
-      _showMessage("An error occurred: $e",
-          success: false, arabicMessage: "حدث خطأ: $e");
-    } finally {
-      setState(() => _isSubmitting = false);
-    }
-  }
-
-  void _showMessage(String message,
-      {bool success = false, String? arabicMessage}) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final String displayMessage =
-        isArabic && arabicMessage != null ? arabicMessage : message;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(displayMessage, style: TextStyle(fontFamily: 'NotoKufi')),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ),
-    );
-  }
-
-  Widget _buildImagePreview() {
-    return Wrap(
-      spacing: 10,
-      children: [
-        // Existing Images (from server)
-        ..._existingImages.map((url) => _buildImageItem(url, true)),
-        // New Images (locally picked)
-        ..._newImages.asMap().entries.map((entry) {
-          int index = entry.key;
-          var image = entry.value;
-          return _buildImageItem(image, false, index: index);
-        }),
-      ],
-    );
-  }
-
-  Widget _buildImageItem(dynamic image, bool isExisting, {int? index}) {
-    return Stack(
-      alignment: Alignment.topRight,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: isExisting
-              ? Image.network(
-                  "https://legaryan.heama-soft.com/uploads/$image",
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.cover,
-                )
-              : kIsWeb && image is Uint8List
-                  ? Image.memory(
-                      image,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    )
-                  : Image.file(
-                      image as File,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    ),
-        ),
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              if (isExisting) {
-                _deleteExistingImage(image);
-              } else if (index != null) {
-                _removeNewImage(index);
-              }
-            });
-          },
-          child: CircleAvatar(
-            radius: 12,
-            backgroundColor: Colors.red,
-            child: Icon(Icons.close, size: 16, color: Colors.white),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _deleteExistingImage(String imageUrl) async {
-    final url = Uri.parse('https://legaryan.heama-soft.com/delete_image.php');
-    try {
-      final response = await http.post(url, body: {'image_url': imageUrl});
-      final responseData = jsonDecode(response.body);
-      if (responseData['status'] == 'success') {
-        setState(() {
-          _existingImages.remove(imageUrl);
-        });
-        _showMessage("Image deleted successfully",
-            success: true, arabicMessage: "تم حذف الصورة بنجاح");
-      } else {
-        _showMessage("Error deleting image: ${responseData['message']}",
-            arabicMessage: "خطأ في حذف الصورة: ${responseData['message']}");
+        AppLogger.error('Update failed: ${decoded['message']}',
+            tag: 'UPDATE_DETAIL');
+        _snack(isArabic
+            ? 'خطأ: ${decoded['message']}'
+            : 'هەڵە: ${decoded['message']}');
       }
     } catch (e) {
-      _showMessage("Error occurred while deleting: $e",
-          arabicMessage: "حدث خطأ أثناء الحذف: $e");
+      AppLogger.error('Update error: $e', tag: 'UPDATE_DETAIL');
+      _snack(isArabic ? 'حدث خطأ: $e' : 'هەڵەیەک ڕوویدا: $e');
     }
+    setState(() => _isSubmitting = false);
   }
 
-  Widget _buildTextField(TextEditingController controller, String label,
-      {int maxLines = 1}) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      validator: (value) => value == null || value.isEmpty
-          ? (isArabic ? "هذا الحقل مطلوب" : "پێویستە پر بکرێتەوە")
-          : null,
-    );
+  void _snack(String msg, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: success ? AppTheme.success : AppTheme.error,
+    ));
   }
 
-  Widget _buildRadioButtons() {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          isArabic ? "هل هو مفعل؟" : "ئایا چالاکە؟",
-          style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
-        ),
-        SizedBox(height: 10),
-        Row(
-          children: [
-            Radio<bool>(
-              value: true,
-              groupValue: _isActive,
-              onChanged: (value) => setState(() => _isActive = value!),
-            ),
-            Text(isArabic ? "نعم" : "بەڵێ",
-                style: TextStyle(fontFamily: 'NotoKufi')),
-            SizedBox(width: 20),
-            Radio<bool>(
-              value: false,
-              groupValue: _isActive,
-              onChanged: (value) => setState(() => _isActive = value!),
-            ),
-            Text(isArabic ? "لا" : "نەخێر",
-                style: TextStyle(fontFamily: 'NotoKufi')),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDescriptionAndAdditionalInfo() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          Localizations.localeOf(context).languageCode == 'ar'
-              ? "الوصف"
-              : "وەسف",
-          style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
-        ),
-        SizedBox(height: 8),
-        _buildTextField(
-            _descriptionController,
-            Localizations.localeOf(context).languageCode == 'ar'
-                ? "الوصف"
-                : "وەسف",
-            maxLines: 3),
-        SizedBox(height: 15),
-        Text(
-          Localizations.localeOf(context).languageCode == 'ar'
-              ? "معلومات إضافية (اختياري)"
-              : "زانیاری زیاتر (اختیاری)",
-          style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
-        ),
-        SizedBox(height: 8),
-        TextFormField(
-          controller: _additionalInfoController,
-          maxLines: 2,
-          decoration: InputDecoration(
-            labelText: Localizations.localeOf(context).languageCode == 'ar'
-                ? "معلومات إضافية (اختياري)"
-                : "زانیاری زیاتر (اختیاری)",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDropdown(String label, List<dynamic> items, String? value,
-      Function(String?) onChanged) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      items: items.map((item) {
-        return DropdownMenuItem<String>(
-          value: item['id'].toString(),
-          child: Text(
-            item['name'] ?? item['full_name'] ?? '',
-            style: TextStyle(fontFamily: 'NotoKufi'),
-          ),
-        );
-      }).toList(),
-      onChanged: onChanged,
-      validator: (value) => value == null
-          ? (isArabic ? "هذا الحقل مطلوب" : "پێویستە $label هەڵبژێردرێت")
-          : null,
-    );
-  }
+  // ── BUILD ────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    return AppScaffold(
+      title: S.updateDetailsTitle.of(context),
+      showDrawer: false,
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHero(context),
+              const SizedBox(height: 18),
+              _buildFormCard(context),
+              const SizedBox(height: 18),
+              _buildImagesCard(context),
+              const SizedBox(height: 22),
+              _buildSubmitButton(context),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-    return Directionality(
-      textDirection: TextDirection.rtl, // Ensures RTL layout
-      child: Scaffold(
-        appBar: AppBar(
-          iconTheme: const IconThemeData(color: Colors.white),
-          backgroundColor: Colors.deepPurple,
-          title: Text(
-            isArabic ? "تحديث المعلومات" : "نوێکردنەوەی زانیاری",
-            style: TextStyle(
-              fontFamily: 'NotoKufi',
-              color: Colors.white,
-              fontSize: 20,
+  // ── Hero card ────────────────────────────────────────────
+
+  Widget _buildHero(BuildContext context) {
+    final name = _nameCtrl.text.isEmpty
+        ? S.updateDetailsTitle.of(context)
+        : _nameCtrl.text;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: AppTheme.appBarGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.appBarShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.22),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white54, width: 1.5),
+            ),
+            child: const Icon(Icons.edit_note_rounded,
+                size: 30, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: AppTheme.headingLarge.copyWith(fontSize: 17),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  S.updateDetailsHeroSubtitle.of(context),
+                  style: AppTheme.captionWhite.copyWith(fontSize: 12),
+                ),
+              ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ── Form card ────────────────────────────────────────────
+
+  Widget _buildFormCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _fieldLabel(S.insertDetailsSubcategoryLabel.of(context)),
+          const SizedBox(height: 6),
+          _dropdown(
+              S.insertDetailsSubcategoryLabel.of(context),
+              Icons.category_rounded,
+              _subCategories,
+              _selectedSubCategory,
+              (v) => setState(() => _selectedSubCategory = v)),
+          const SizedBox(height: 16),
+          _fieldLabel(S.insertDetailsUserLabel.of(context)),
+          const SizedBox(height: 6),
+          _dropdown(
+              S.insertDetailsUserLabel.of(context),
+              Icons.person_rounded,
+              _users,
+              _selectedUser,
+              (v) => setState(() => _selectedUser = v)),
+          const SizedBox(height: 16),
+          _fieldLabel(S.insertDetailsNameLabel.of(context)),
+          const SizedBox(height: 6),
+          _field(_nameCtrl, S.insertDetailsNameLabel.of(context),
+              Icons.label_rounded),
+          const SizedBox(height: 16),
+          _fieldLabel(S.insertDetailsContactLabel.of(context)),
+          const SizedBox(height: 6),
+          _field(_contactCtrl, S.insertDetailsContactLabel.of(context),
+              Icons.phone_rounded,
+              type: TextInputType.phone),
+          const SizedBox(height: 16),
+          _fieldLabel(S.insertDetailsLocationLabel.of(context)),
+          const SizedBox(height: 6),
+          _dropdown(
+              S.insertDetailsLocationLabel.of(context),
+              Icons.location_city_rounded,
+              _cities.map((c) => {'id': c, 'name': c}).toList(),
+              _selectedCity,
+              (v) => setState(() => _selectedCity = v)),
+          const SizedBox(height: 16),
+          _activeCard(context),
+          const SizedBox(height: 16),
+          _fieldLabel(S.insertDetailsDescLabel.of(context)),
+          const SizedBox(height: 6),
+          _field(_descCtrl, S.insertDetailsDescLabel.of(context),
+              Icons.description_rounded,
+              maxLines: 3),
+          const SizedBox(height: 16),
+          _fieldLabel(S.insertDetailsAdditional.of(context)),
+          const SizedBox(height: 6),
+          _field(_additionalCtrl, S.insertDetailsAdditional.of(context),
+              Icons.info_outline_rounded,
+              maxLines: 2, required: false),
+        ],
+      ),
+    );
+  }
+
+  // ── Images card ──────────────────────────────────────────
+
+  Widget _buildImagesCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _sectionHeader(
+            icon: Icons.collections_rounded,
+            title: S.updateDetailsImagesSection.of(context),
+          ),
+          const SizedBox(height: 14),
+          if (_existingImages.isNotEmpty || _newImages.isNotEmpty) ...[
+            _buildImagesGrid(),
+            const SizedBox(height: 14),
+          ],
+          OutlinedButton.icon(
+            onPressed: _pickImages,
+            icon: const Icon(Icons.add_a_photo_rounded, size: 18),
+            label: Text(S.updateDetailsAddPhotos.of(context)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagesGrid() {
+    return Wrap(spacing: 10, runSpacing: 10, children: [
+      ..._existingImages.map((url) => _imgItem(
+          image: Image.network('${AppConstants.uploadsUrl}$url',
+              width: 92, height: 92, fit: BoxFit.cover),
+          onRemove: () => _removeExistingImage(url))),
+      ..._newImages.asMap().entries.map((e) {
+        final img = e.value;
+        return _imgItem(
+          image: kIsWeb && img is Uint8List
+              ? Image.memory(img, width: 92, height: 92, fit: BoxFit.cover)
+              : Image.file(img as File,
+                  width: 92, height: 92, fit: BoxFit.cover),
+          onRemove: () => _removeNewImage(e.key),
+        );
+      }),
+    ]);
+  }
+
+  Widget _imgItem({required Widget image, required VoidCallback onRemove}) {
+    return Stack(alignment: Alignment.topRight, children: [
+      ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm), child: image),
+      GestureDetector(
+        onTap: onRemove,
+        child: Container(
+          width: 24,
+          height: 24,
+          decoration: const BoxDecoration(
+              color: AppTheme.error, shape: BoxShape.circle),
+          child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Subcategory Dropdown
-                  _buildDropdown(
-                    isArabic ? "نوع الفئة الفرعية" : "جۆری ژێرپۆل",
-                    _subCategories,
-                    _selectedSubCategory,
-                    (value) => setState(() => _selectedSubCategory = value),
-                  ),
-                  SizedBox(height: 15),
-                  // User Dropdown
-                  _buildDropdown(
-                    isArabic ? "المستخدم" : "بەکارهێنەر",
-                    _users,
-                    _selectedUser,
-                    (value) => setState(() => _selectedUser = value),
-                  ),
-                  SizedBox(height: 15),
-                  // Name Text Field
-                  _buildTextField(_nameController,
-                      isArabic ? "اسم المعلومات" : "ناوی زانیاری"),
-                  SizedBox(height: 15),
-                  // Phone Number Text Field
-                  _buildTextField(_contactController,
-                      isArabic ? "رقم الاتصال" : "ژمارەی پەیوەندیدان"),
-                  SizedBox(height: 15),
-                  // Location Dropdown
-                  _buildDropdown(
-                    isArabic ? "الموقع" : "شوێن",
-                    _cities.map((city) => {"id": city, "name": city}).toList(),
-                    _selectedCity,
-                    (value) => setState(() => _selectedCity = value),
-                  ),
-                  SizedBox(height: 15),
-                  // Radio Buttons for Active/Inactive
-                  _buildRadioButtons(),
-                  SizedBox(height: 15),
-                  // Description and Additional Info
-                  _buildDescriptionAndAdditionalInfo(),
-                  SizedBox(height: 15),
-                  // Image Preview Section
-                  _buildImagePreview(),
-                  SizedBox(height: 15),
-                  // Button to Add Images
-                  ElevatedButton.icon(
-                    onPressed: _pickImages,
-                    icon: Icon(Icons.add_a_photo, color: Colors.white),
-                    label: Text(
-                      isArabic ? "أضف صوراً" : "وێنە زیاد بکە",
-                      style: TextStyle(
-                          fontFamily: 'NotoKufi', color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                    ),
-                  ),
-                  SizedBox(height: 15),
-                  // Update Button
-                  ElevatedButton(
-                    onPressed: _isSubmitting ? null : _updateData,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      padding: EdgeInsets.symmetric(vertical: 15),
-                    ),
-                    child: _isSubmitting
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            isArabic ? "تحديث" : "نوێکردنەوە",
-                            style: TextStyle(
-                              fontFamily: 'NotoKufi',
-                              color: Colors.white,
-                              fontSize: 18,
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            ),
+      ),
+    ]);
+  }
+
+  // ── Submit ───────────────────────────────────────────────
+
+  Widget _buildSubmitButton(BuildContext context) {
+    return SizedBox(
+      height: AppTheme.buttonHeight,
+      child: ElevatedButton.icon(
+        onPressed: _isSubmitting ? null : _updateData,
+        icon: _isSubmitting
+            ? const SizedBox.shrink()
+            : const Icon(Icons.check_circle_outline_rounded, size: 18),
+        label: _isSubmitting
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : Text(S.updateButton.of(context)),
+      ),
+    );
+  }
+
+  // ── Helpers ──────────────────────────────────────────────
+
+  Widget _field(TextEditingController ctrl, String label, IconData icon,
+      {TextInputType type = TextInputType.text,
+      int maxLines = 1,
+      bool required = true}) {
+    final isArabic = context.isArabic;
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: type,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        hintText: label,
+        prefixIcon: Icon(icon, color: AppTheme.primary),
+      ),
+      validator: required
+          ? (v) => (v == null || v.isEmpty)
+              ? (isArabic ? S.fieldRequiredFill.ar : S.fieldRequiredFill.ku)
+              : null
+          : null,
+    );
+  }
+
+  Widget _dropdown(String label, IconData icon, List<dynamic> items,
+      String? value, ValueChanged<String?> onChange) {
+    final isArabic = context.isArabic;
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      icon: const Icon(Icons.keyboard_arrow_down_rounded,
+          color: AppTheme.textMuted),
+      decoration: InputDecoration(
+        hintText: label,
+        prefixIcon: Icon(icon, color: AppTheme.primary),
+      ),
+      items: items
+          .map((item) => DropdownMenuItem<String>(
+                value: item['id'].toString(),
+                child: Text(item['name'] ?? item['full_name'] ?? '',
+                    overflow: TextOverflow.ellipsis),
+              ))
+          .toList(),
+      onChanged: onChange,
+      validator: (v) => v == null
+          ? (isArabic ? S.fieldRequiredFill.ar : S.fieldRequiredFill.ku)
+          : null,
+    );
+  }
+
+  Widget _activeCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            S.updateDetailsActiveLabel.of(context),
+            style: const TextStyle(
+                fontFamily: 'NotoKufi',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary),
           ),
         ),
+        Row(children: [
+          Radio<bool>(
+              value: true,
+              groupValue: _isActive,
+              onChanged: (v) => setState(() => _isActive = v!),
+              activeColor: AppTheme.primary),
+          Text(S.yes.of(context),
+              style: const TextStyle(fontFamily: 'NotoKufi')),
+          const SizedBox(width: 16),
+          Radio<bool>(
+              value: false,
+              groupValue: _isActive,
+              onChanged: (v) => setState(() => _isActive = v!),
+              activeColor: AppTheme.primary),
+          Text(S.no.of(context),
+              style: const TextStyle(fontFamily: 'NotoKufi')),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _sectionHeader({required IconData icon, required String title}) {
+    return Row(children: [
+      Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        ),
+        child: Icon(icon, color: AppTheme.primary, size: 18),
+      ),
+      const SizedBox(width: 12),
+      Expanded(child: Text(title, style: AppTheme.headingSmall)),
+    ]);
+  }
+
+  Widget _fieldLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontFamily: 'NotoKufi',
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppTheme.textPrimary,
       ),
     );
   }

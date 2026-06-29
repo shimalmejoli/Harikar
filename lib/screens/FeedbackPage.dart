@@ -1,345 +1,251 @@
 // lib/screens/FeedbackPage.dart
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../widgets/custom_drawer.dart'; // Ensure this path is correct
-import '../widgets/feedback_card.dart'; // Updated FeedbackCard with enhanced design
+
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
+import '../widgets/feedback_card.dart';
 
 class FeedbackPage extends StatefulWidget {
+  const FeedbackPage({Key? key}) : super(key: key);
+
   @override
   _FeedbackPageState createState() => _FeedbackPageState();
 }
 
 class _FeedbackPageState extends State<FeedbackPage> {
-  // List to store fetched feedback entries
   List<Map<String, dynamic>> _feedbackEntries = [];
-
-  // Loading and error states
   bool _isLoading = false;
   String? _errorMessage;
-
-  // Flag to ensure data is fetched only once
   bool _didFetchFeedback = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Remove data fetching from initState.
-  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_didFetchFeedback) {
-      _fetchFeedbackEntries();
       _didFetchFeedback = true;
+      _fetchFeedbackEntries();
     }
   }
 
-  /// Fetches all feedback entries from the backend API
   Future<void> _fetchFeedbackEntries() async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
+    AppLogger.info('Fetching feedback entries', tag: 'FEEDBACK_PAGE');
 
-    // Construct the URL (no pagination parameters)
-    final String url = 'https://legaryan.heama-soft.com/get_feedback.php';
+    final response =
+        await ApiService.instance.get(AppConstants.getFeedbackEndpoint);
+    if (!mounted) return;
 
-    debugPrint("Fetching feedback from: $url");
-
-    try {
-      final response = await http.get(Uri.parse(url));
-      debugPrint("API Response: ${response.body}");
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          List<Map<String, dynamic>> fetchedFeedback =
-              List<Map<String, dynamic>>.from(data['data']);
-
-          setState(() {
-            _feedbackEntries = fetchedFeedback;
-          });
-        } else {
-          setState(() {
-            _errorMessage = data['message'] ??
-                (isArabic
-                    ? 'فشل في تحميل الملاحظات.'
-                    : 'خەلەتی لە هنارتنا داتا دا');
-          });
-        }
-      } else {
+    if (response.success && response.data != null) {
+      final data = response.data!;
+      if (data['status'] == 'success') {
+        final list = List<Map<String, dynamic>>.from(data['data'] as List);
+        AppLogger.info('Feedback loaded: ${list.length} items',
+            tag: 'FEEDBACK_PAGE');
         setState(() {
-          _errorMessage = isArabic
-              ? 'خطأ في النظام: ${response.statusCode}'
-              : 'خەلەتی ل سیستەمیدا: ${response.statusCode}';
+          _feedbackEntries = list;
+          _isLoading = false;
+        });
+      } else {
+        AppLogger.warning('Feedback API error: ${data['message']}',
+            tag: 'FEEDBACK_PAGE');
+        setState(() {
+          _errorMessage =
+              data['message'] ?? S.feedbackPageLoadError.of(context);
+          _isLoading = false;
         });
       }
-    } catch (e) {
-      debugPrint("Error fetching feedback: $e");
+    } else {
+      AppLogger.error('Feedback fetch failed: ${response.error}',
+          tag: 'FEEDBACK_PAGE');
       setState(() {
-        _errorMessage = isArabic
-            ? 'حدث خطأ أثناء جلب الملاحظات.'
-            : 'خەلەتی ڕوویدا لە هنارتنا فیدباکی دا.';
-      });
-    } finally {
-      setState(() {
+        _errorMessage = S.feedbackPageFetchError.of(context);
         _isLoading = false;
       });
     }
   }
 
-  /// Deletes a feedback entry by ID
   Future<void> _deleteFeedback(String id) async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-
-    // Confirm deletion with the user
-    bool? confirm = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(isArabic ? "حذف" : "ژێبرن",
-              style: TextStyle(fontFamily: 'NotoKufi')),
-          content: Text(
-              isArabic
-                  ? "هل أنت متأكد من حذف هذه الملاحظات؟"
-                  : "پشت راستی ژێبرنێ؟",
-              style: TextStyle(fontFamily: 'NotoKufi')),
-          actions: [
-            TextButton(
-              child: Text(isArabic ? "لا" : "نەخێر",
-                  style: TextStyle(
-                      color: Colors.deepPurple, fontFamily: 'NotoKufi')),
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-            TextButton(
-              child: Text(isArabic ? "نعم" : "بەڵێ",
-                  style: TextStyle(
-                      color: Colors.deepPurple, fontFamily: 'NotoKufi')),
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+        title: Text(S.feedbackPageDeleteTitle.of(ctx),
+            style: const TextStyle(fontFamily: 'NotoKufi')),
+        content: Text(S.feedbackPageDeleteContent.of(ctx),
+            style: const TextStyle(fontFamily: 'NotoKufi')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(S.no.of(ctx),
+                style: const TextStyle(
+                    fontFamily: 'NotoKufi', color: AppTheme.primary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(S.yes.of(ctx),
+                style: const TextStyle(
+                    fontFamily: 'NotoKufi', color: Colors.white)),
+          ),
+        ],
+      ),
     );
 
     if (confirm != true) return;
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    setState(() => _isLoading = true);
+    AppLogger.info('Deleting feedback id: $id', tag: 'FEEDBACK_PAGE');
 
-    final String url = 'https://legaryan.heama-soft.com/delete_feedback.php';
+    final response = await ApiService.instance.post(
+      AppConstants.deleteFeedbackEndpoint,
+      jsonBody: {'id': id},
+    );
 
-    try {
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'id': id}),
-      );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      debugPrint("Delete API Response: ${response.body}");
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          // Remove the deleted entry from the list
-          setState(() {
-            _feedbackEntries
-                .removeWhere((entry) => entry['id'].toString() == id);
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                isArabic ? "تم حذف الملاحظات." : "فیدباکەکە هاتن ژێبرن.",
-                style: TextStyle(fontFamily: 'NotoKufi'),
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(
-              data['message'] ??
-                  (isArabic
-                      ? "فشل حذف الملاحظات."
-                      : "ژێبرن فیدباکە سەرکەفتی نەبی."),
-              style: TextStyle(fontFamily: 'NotoKufi'),
-            )),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-            isArabic
-                ? "خطأ في النظام: ${response.statusCode}"
-                : "خەلەتی ل سیستەمی: ${response.statusCode}",
-            style: TextStyle(fontFamily: 'NotoKufi'),
-          )),
-        );
-      }
-    } catch (e) {
-      debugPrint("Error deleting feedback: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-          isArabic ? "حدث خطأ أثناء حذف الملاحظات." : "خەلەتی ژێبرنا فیدباکە",
-          style: TextStyle(fontFamily: 'NotoKufi'),
-        )),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+    if (response.success) {
+      AppLogger.info('Feedback deleted: $id', tag: 'FEEDBACK_PAGE');
+      setState(
+          () => _feedbackEntries.removeWhere((e) => e['id'].toString() == id));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(S.feedbackPageDeletedSnack.of(context),
+            style: const TextStyle(fontFamily: 'NotoKufi')),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } else {
+      AppLogger.error('Delete feedback failed: ${response.error}',
+          tag: 'FEEDBACK_PAGE');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(S.feedbackPageDeleteFailedSnack.of(context),
+            style: const TextStyle(fontFamily: 'NotoKufi')),
+        backgroundColor: AppTheme.error,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
-  /// Navigates to the details screen (if applicable)
-  void _navigateToDetails(Map<String, dynamic> feedback) {
-    // For now, show a dialog with feedback details
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
+  void _showDetails(Map<String, dynamic> feedback) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            feedback['name'] ?? (isArabic ? "اسم المستخدم" : "ناڤ بەکارهێنەر"),
-            style: TextStyle(fontFamily: 'NotoKufi'),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                isArabic
-                    ? "رقم الهاتف: ${feedback['phone_number'] ?? 'غير متوفر'}"
-                    : "ژمارەی مۆبایل: ${feedback['phone_number'] ?? 'نەدۆزرایەوە'}",
-                style: TextStyle(fontFamily: 'NotoKufi'),
-              ),
-              SizedBox(height: 10),
-              Text(
-                isArabic ? "الرسالة:" : "پەیام:",
-                style: TextStyle(fontFamily: 'NotoKufi'),
-              ),
-              SizedBox(height: 5),
-              Text(
-                feedback['message'] ??
-                    (isArabic ? "الرسالة غير محددة" : "پەیام نادیارە"),
-                style: TextStyle(fontFamily: 'NotoKufi'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                isArabic ? "إغلاق" : "داخستن",
-                style: TextStyle(fontFamily: 'NotoKufi'),
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+        title: Text(
+            feedback['name'] ?? S.feedbackPageUserName.of(ctx),
+            style: const TextStyle(
+                fontFamily: 'NotoKufi', fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _detailRow(
+                Icons.phone_rounded,
+                S.phoneNumberLabelColon.of(ctx),
+                feedback['phone_number'] ?? '—'),
+            const SizedBox(height: 12),
+            Text(S.feedbackPageMessageLabel.of(ctx),
+                style: const TextStyle(
+                    fontFamily: 'NotoKufi',
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                    fontSize: 13)),
+            const SizedBox(height: 6),
+            Text(
+                feedback['message'] ?? S.feedbackPageMessageNone.of(ctx),
+                style: const TextStyle(
+                    fontFamily: 'NotoKufi', fontSize: 14, height: 1.5)),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(S.feedbackPageClose.of(ctx),
+                style: const TextStyle(
+                    fontFamily: 'NotoKufi', color: AppTheme.primary)),
+          ),
+        ],
+      ),
     );
   }
 
-  /// Builds individual feedback cards
-  Widget _buildFeedbackCard(Map<String, dynamic> feedback) {
-    return FeedbackCard(
-      feedback: feedback,
-      onDelete: () => _deleteFeedback(feedback['id'].toString()),
-      onTap: () => _navigateToDetails(feedback),
-    );
-  }
-
-  /// Builds the main content of the page
-  Widget _buildContent() {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
-    } else if (_errorMessage != null) {
-      return Center(
-        child: Text(
-          _errorMessage!,
-          style: TextStyle(
-            fontFamily: 'NotoKufi',
-            fontSize: 16,
-            color: Colors.red,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      );
-    } else if (_feedbackEntries.isEmpty) {
-      return Center(
-        child: Text(
-          isArabic ? "لا توجد ملاحظات." : "هیچ فیدباکێک نەدۆزرایەوە.",
-          style: TextStyle(
-            fontFamily: 'NotoKufi',
-            fontSize: 16,
-            color: Colors.grey,
-          ),
-        ),
-      );
-    } else {
-      return ListView.builder(
-        itemCount: _feedbackEntries.length,
-        itemBuilder: (context, index) {
-          final feedback = _feedbackEntries[index];
-          return _buildFeedbackCard(feedback);
-        },
-      );
-    }
-  }
-
-  /// Refreshes the feedback list (pull-to-refresh or after deletion)
-  Future<void> _refreshFeedback() async {
-    await _fetchFeedbackEntries();
+  Widget _detailRow(IconData icon, String label, String value) {
+    return Row(children: [
+      Icon(icon, size: 16, color: AppTheme.primary),
+      const SizedBox(width: 6),
+      Text('$label ',
+          style: const TextStyle(
+              fontFamily: 'NotoKufi',
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.black54)),
+      Text(value, style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 13)),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Define the gradient for the AppBar
-    final Gradient appBarGradient = LinearGradient(
-      colors: [Colors.deepPurple, Colors.blueAccent],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
+    return AppScaffold(
+      title: S.feedbackPageTitle.of(context),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.accent))
+          : _errorMessage != null
+              ? _buildError(context)
+              : _feedbackEntries.isEmpty
+                  ? Center(
+                      child: Text(
+                          S.feedbackPageEmpty.of(context),
+                          style: const TextStyle(
+                              fontFamily: 'NotoKufi',
+                              fontSize: 16,
+                              color: Colors.grey)))
+                  : RefreshIndicator(
+                      onRefresh: _fetchFeedbackEntries,
+                      color: AppTheme.accent,
+                      child: ListView.builder(
+                        itemCount: _feedbackEntries.length,
+                        itemBuilder: (_, i) => FeedbackCard(
+                          feedback: _feedbackEntries[i],
+                          onDelete: () => _deleteFeedback(
+                              _feedbackEntries[i]['id'].toString()),
+                          onTap: () => _showDetails(_feedbackEntries[i]),
+                        ),
+                      ),
+                    ),
     );
+  }
 
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-
-    return Directionality(
-      textDirection: TextDirection.rtl, // Enforce RTL direction
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            isArabic ? "الملاحظات" : "فیدباکەکان",
-            style: TextStyle(
-              fontFamily: 'NotoKufi',
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-              color: Colors.white,
-            ),
-          ),
-          flexibleSpace: Container(
-            decoration: BoxDecoration(
-              gradient: appBarGradient, // Apply gradient
-            ),
-          ),
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        endDrawer: CustomDrawer(),
-        body: Column(
+  Widget _buildError(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Main Content
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _refreshFeedback,
-                child: _buildContent(),
+            const Icon(Icons.error_outline_rounded,
+                size: 64, color: AppTheme.error),
+            const SizedBox(height: 12),
+            Text(_errorMessage!,
+                style: AppTheme.bodyMedium.copyWith(color: AppTheme.error),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 200,
+              child: ElevatedButton.icon(
+                onPressed: _fetchFeedbackEntries,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(S.retry.of(context)),
               ),
             ),
           ],

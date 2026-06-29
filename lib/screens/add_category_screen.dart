@@ -2,597 +2,542 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data'; // For Uint8List
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import '../widgets/custom_drawer.dart';
-import 'package:flutter/foundation.dart'; // To use kIsWeb
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../main.dart' show LocaleContext;
 import '../models/user_model.dart';
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
 
 class AddCategoryScreen extends StatefulWidget {
+  const AddCategoryScreen({Key? key}) : super(key: key);
   @override
   _AddCategoryScreenState createState() => _AddCategoryScreenState();
 }
 
 class _AddCategoryScreenState extends State<AddCategoryScreen> {
-  final TextEditingController _categoryController = TextEditingController();
+  final _categoryController = TextEditingController();
   bool _isLoading = false;
-  String? _message;
-  bool _isSuccess = false;
   List<dynamic> _categories = [];
-  XFile? _selectedImage; // For image selection
-
-  // Flag to ensure fetching is done only once in didChangeDependencies
+  XFile? _selectedImage;
   bool _didFetchCategories = false;
+
+  // For edit dialog
+  XFile? _newImage;
+  Uint8List? _imageBytes;
+  final _editNameController = TextEditingController();
+
+  @override
+  void dispose() {
+    _categoryController.dispose();
+    _editNameController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_didFetchCategories) {
-      _fetchCategories();
       _didFetchCategories = true;
+      _fetchCategories();
     }
   }
 
-  // Fetch Categories
   Future<void> _fetchCategories() async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final url = Uri.parse('https://legaryan.heama-soft.com/get_categories.php');
-
-    try {
-      final response = await http.get(url);
-      final responseData = jsonDecode(response.body);
-
-      if (responseData['status'] == 'success') {
-        setState(() {
-          _categories = responseData['data'];
-        });
-      } else {
-        _showMessage(responseData['message']);
-      }
-    } catch (e) {
-      _showMessage(
-          isArabic ? "خطأ في جلب الفئات: $e" : "شاشي د تۆمارکرنا کاران دا: $e");
+    AppLogger.info('Fetching categories', tag: 'ADD_CAT');
+    // `fetchCategories()` already cache-busts the GET — see the
+    // `_cacheBust()` helper in ApiService.
+    final response = await ApiService.instance.fetchCategories();
+    if (!mounted) return;
+    if (response.success && response.data != null) {
+      final list = response.data!['data'] as List? ?? [];
+      // Diagnostic: print each row's is_active so we can see whether
+      // the server is actually toggling between fetches.
+      final summary = list
+          .map((c) => '${c['id']}=${c['is_active']}')
+          .join(', ');
+      AppLogger.info(
+          'Categories loaded: ${list.length} — [$summary]',
+          tag: 'ADD_CAT');
+      setState(() => _categories = list);
+    } else {
+      AppLogger.error('Fetch categories failed: ${response.error}',
+          tag: 'ADD_CAT');
     }
   }
 
-  // Pick Image
   Future<void> _pickImage() async {
-    final pickedFile =
-        await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = pickedFile;
-      });
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (f != null) setState(() => _selectedImage = f);
+  }
+
+  Future<void> _pickNewImage() async {
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (f != null) {
+      _newImage = f;
+      if (kIsWeb) _imageBytes = await f.readAsBytes();
     }
   }
 
   Future<void> _addCategory() async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final String categoryName = _categoryController.text.trim();
-
-    // Validation
-    if (categoryName.isEmpty) {
-      _showMessage(
-          isArabic ? "يجب إدخال اسم الفئة." : "ناڤێ کارێ گەلەک یێ پێدڤیە.");
+    final isArabic = context.isArabic;
+    final name = _categoryController.text.trim();
+    if (name.isEmpty) {
+      _snack(S.addCategoryNameRequired.of(context));
       return;
     }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    final url = Uri.parse('https://legaryan.heama-soft.com/add_category.php');
+    setState(() => _isLoading = true);
+    AppLogger.info('Adding category: $name', tag: 'ADD_CAT');
 
     try {
-      var request = http.MultipartRequest('POST', url);
-      request.fields['category_name'] = categoryName;
-
-      // Add image file if selected
+      final request = http.MultipartRequest(
+          'POST', Uri.parse(AppConstants.addCategoryEndpoint));
+      request.fields['category_name'] = name;
       if (_selectedImage != null) {
         if (kIsWeb) {
           final bytes = await _selectedImage!.readAsBytes();
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'image', // Field name for the image
-              bytes,
-              filename: _selectedImage!.name,
-            ),
-          );
+          request.files.add(http.MultipartFile.fromBytes('image', bytes,
+              filename: _selectedImage!.name));
         } else {
           request.files.add(
-            await http.MultipartFile.fromPath(
-              'image', // Field name for the image
-              _selectedImage!.path,
-            ),
-          );
+              await http.MultipartFile.fromPath('image', _selectedImage!.path));
         }
       }
-
-      // Send the request
-      var response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-      print("Server Response: $responseBody");
-
-      final decodedResponse = jsonDecode(responseBody);
-
-      if (decodedResponse['status'] == 'success') {
-        _showMessage(decodedResponse['message'], success: true);
+      final resp = await request.send();
+      final body = await resp.stream.bytesToString();
+      final decoded = jsonDecode(body);
+      if (!mounted) return;
+      if (decoded['status'] == 'success') {
+        AppLogger.info('Category added successfully', tag: 'ADD_CAT');
+        _snack(decoded['message'], success: true);
         _categoryController.clear();
-        setState(() {
-          _selectedImage = null;
-        });
-        _fetchCategories(); // Refresh categories
-      } else {
-        _showMessage(decodedResponse['message']);
-      }
-    } catch (e) {
-      print("Error: $e");
-      _showMessage(isArabic ? "حدث خطأ: $e" : "هەڵە ڕویدا: $e");
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  // Delete Category
-  Future<void> _deleteCategory(String id) async {
-    final url =
-        Uri.parse('https://legaryan.heama-soft.com/delete_category.php');
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"id": id}),
-      );
-
-      final responseData = jsonDecode(response.body);
-
-      if (responseData['status'] == 'success') {
-        _showMessage(responseData['message'], success: true);
+        setState(() => _selectedImage = null);
         _fetchCategories();
       } else {
-        _showMessage(responseData['message']);
+        _snack(decoded['message']);
       }
     } catch (e) {
-      _showMessage("هەڵە لە سڕینەوەی کارەکان: $e");
+      AppLogger.error('Add category error: $e', tag: 'ADD_CAT');
+      _snack(isArabic ? 'حدث خطأ: $e' : 'هەڵە ڕویدا: $e');
+    }
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _deleteCategory(String id) async {
+    AppLogger.info('Deleting category id: $id', tag: 'ADD_CAT');
+    final response = await ApiService.instance.post(
+      AppConstants.deleteCategoryEndpoint,
+      jsonBody: {'id': id},
+    );
+    if (!mounted) return;
+    if (response.success) {
+      _snack(response.data?['message'] ?? 'Deleted', success: true);
+      _fetchCategories();
+    } else {
+      _snack(response.error ?? 'Error');
     }
   }
 
-  // Show Confirmation Dialog
+  Future<void> _toggleCategoryStatus(String id) async {
+    AppLogger.info('Toggling category status: $id', tag: 'ADD_CAT');
+    final response = await ApiService.instance.post(
+      AppConstants.toggleCategoryEndpoint,
+      fields: {'id': id},
+    );
+    if (!mounted) return;
+
+    AppLogger.info(
+      'Toggle response — success: ${response.success}, '
+      'data: ${response.data}, error: ${response.error}',
+      tag: 'ADD_CAT',
+    );
+
+    // Always refetch so the UI reflects whatever the server actually
+    // has now. The toggle endpoint may return a non-standard body
+    // (no `status: success` or `success: true` flag) which would
+    // make `response.success` false even when the row was toggled.
+    await _fetchCategories();
+
+    if (!response.success) {
+      _snack(response.error ?? 'Toggle failed');
+    }
+  }
+
   Future<void> _confirmDelete(String id) async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final bool confirmed = await showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => Directionality(
+      builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: Text(isArabic ? "تأكيد" : 'پشتڕاستکردنەوە'),
-          content: Text(isArabic
-              ? "هل أنت متأكد من حذف الفئة؟"
-              : 'دڵنیای ژێبرنا جۆرێ کارێ؟'),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+          title: Text(S.addCategoryConfirmTitle.of(ctx),
+              style: const TextStyle(fontFamily: 'NotoKufi')),
+          content: Text(S.addCategoryConfirmContent.of(ctx),
+              style: const TextStyle(fontFamily: 'NotoKufi')),
           actions: [
             TextButton(
-              child: Text(isArabic ? "لا" : 'نەخێر',
-                  style: TextStyle(color: Colors.deepPurple)),
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(S.no.of(ctx),
+                    style: const TextStyle(
+                        fontFamily: 'NotoKufi', color: AppTheme.primary))),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: Text(isArabic ? "نعم" : 'بەڵێ',
-                  style: TextStyle(color: Colors.white)),
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(S.yes.of(ctx),
+                  style: const TextStyle(
+                      fontFamily: 'NotoKufi', color: Colors.white)),
             ),
           ],
         ),
       ),
     );
-
-    if (confirmed == true) {
-      _deleteCategory(id);
-    }
-  }
-
-  // Show Message
-  void _showMessage(String message, {bool success = false}) {
-    final snackBar = SnackBar(
-      content: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'NotoKufi',
-          ),
-        ),
-      ),
-      backgroundColor: success ? Colors.green : Colors.red,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      duration: Duration(seconds: 3),
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(snackBar);
-  }
-
-  // Build Each Category Card
-  Widget _buildCategoryCard(Map<String, dynamic> category) {
-    bool isActive = int.tryParse(category['is_active'].toString()) == 1;
-    String imageUrl =
-        category['image_url'] != null && category['image_url'].isNotEmpty
-            ? 'https://legaryan.heama-soft.com/uploads/${category['image_url']}'
-            : '';
-
-    return Container(
-      margin: EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.white : Colors.grey[300],
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: imageUrl.isNotEmpty
-                ? Image.network(imageUrl,
-                    height: 80, width: 80, fit: BoxFit.contain)
-                : Container(
-                    height: 80,
-                    width: 80,
-                    color: Colors.grey[200],
-                    child: Icon(Icons.image, size: 40, color: Colors.grey),
-                  ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            category['name'],
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.deepPurple,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-          ),
-          Spacer(),
-          Divider(height: 1, color: Colors.grey[300]),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(Icons.edit, color: Colors.blueAccent),
-                  onPressed: () => _showEditDialog(category),
-                  iconSize: 20,
-                ),
-                IconButton(
-                  icon: Icon(
-                    isActive ? Icons.check_circle : Icons.cancel,
-                    color: isActive ? Colors.green : Colors.red,
-                  ),
-                  onPressed: () => _toggleCategoryStatus(category['id']),
-                  iconSize: 20,
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete, color: Colors.redAccent),
-                  onPressed: () => _confirmDelete(category['id'].toString()),
-                  iconSize: 20,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _toggleCategoryStatus(String id) async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final url =
-        Uri.parse('https://legaryan.heama-soft.com/toggle_category_status.php');
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {"Content-Type": "application/x-www-form-urlencoded"},
-        body: {"id": id},
-      );
-
-      final responseData = jsonDecode(response.body);
-
-      if (responseData['status'] == 'success') {
-        _showMessage(responseData['message'], success: true);
-        _fetchCategories();
-      } else {
-        _showMessage(responseData['message']);
-      }
-    } catch (e) {
-      _showMessage(isArabic ? "حدث خطأ: $e" : "هەڵە ڕویدا: $e");
-    }
+    if (confirmed == true) _deleteCategory(id);
   }
 
   void _showEditDialog(Map<String, dynamic> category) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final TextEditingController _editNameController =
-        TextEditingController(text: category['name']);
-    XFile? _newImage;
-    Uint8List? _imageBytes; // For Web
+    _editNameController.text = category['name'] ?? '';
+    _newImage = null;
+    _imageBytes = null;
 
-    Future<void> _pickNewImage() async {
-      final pickedFile =
-          await ImagePicker().pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        setState(() {
-          _newImage = pickedFile;
-        });
-        if (kIsWeb) {
-          _imageBytes = await pickedFile.readAsBytes();
+    Future<void> updateCategory() async {
+      AppLogger.info('Updating category: ${category['id']}', tag: 'ADD_CAT');
+      try {
+        final request = http.MultipartRequest(
+            'POST', Uri.parse(AppConstants.updateCategoryEndpoint));
+        request.fields['id'] = category['id'].toString();
+        request.fields['category_name'] = _editNameController.text.trim();
+        if (_newImage != null) {
+          if (kIsWeb) {
+            request.files.add(http.MultipartFile.fromBytes(
+                'image', _imageBytes!,
+                filename: _newImage!.name));
+          } else {
+            request.files.add(
+                await http.MultipartFile.fromPath('image', _newImage!.path));
+          }
         }
-      }
-    }
-
-    Future<void> _updateCategory() async {
-      final bool isArabic =
-          Localizations.localeOf(context).languageCode == 'ar';
-      final String updatedName = _editNameController.text.trim();
-
-      if (updatedName.isEmpty) {
-        _showMessage(
-            isArabic ? "يجب إدخال اسم الفئة." : "ناڤێ پۆلێ گەلەک یێ پێدڤیە.");
-        return;
-      }
-
-      final updateUrl =
-          Uri.parse('https://legaryan.heama-soft.com/update_category.php');
-      var request = http.MultipartRequest('POST', updateUrl);
-      request.fields['action'] = 'update_category';
-      request.fields['id'] = category['id'].toString();
-      request.fields['name'] = updatedName;
-
-      if (_newImage != null) {
-        if (kIsWeb) {
-          request.files.add(
-            http.MultipartFile.fromBytes('image', _imageBytes!,
-                filename: _newImage!.name),
-          );
+        final resp = await request.send();
+        final body = await resp.stream.bytesToString();
+        final decoded = jsonDecode(body);
+        if (!mounted) return;
+        if (decoded['status'] == 'success') {
+          _snack(decoded['message'], success: true);
+          _fetchCategories();
+          Navigator.pop(context);
         } else {
-          request.files.add(
-            await http.MultipartFile.fromPath('image', _newImage!.path),
-          );
+          _snack(decoded['message']);
         }
-      }
-
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-
-      print("Server Response: $responseBody");
-
-      final decodedResponse = jsonDecode(responseBody);
-
-      if (decodedResponse['status'] == 'success') {
-        _showMessage(decodedResponse['message'], success: true);
-        _fetchCategories();
-        Navigator.of(context).pop();
-      } else {
-        _showMessage(decodedResponse['message'], success: false);
+      } catch (e) {
+        _snack('$e');
       }
     }
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return Directionality(
-            textDirection: TextDirection.rtl,
-            child: AlertDialog(
-              title: Text(isArabic ? "تحديث الفئة" : 'نویژەنکرنا جۆرێ کارێ'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: _editNameController,
-                      decoration: InputDecoration(
-                        labelText: isArabic ? "اسم الفئة" : 'ناڤێ کارێ',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: () async {
-                        await _pickNewImage();
-                        setDialogState(() {});
-                      },
-                      child: Container(
-                        height: 100,
-                        width: 100,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(8),
-                          image: _newImage != null
-                              ? DecorationImage(
-                                  image: kIsWeb
-                                      ? MemoryImage(_imageBytes!)
-                                      : FileImage(File(_newImage!.path))
-                                          as ImageProvider,
-                                  fit: BoxFit.cover,
-                                )
-                              : DecorationImage(
-                                  image: NetworkImage(
-                                    'https://legaryan.heama-soft.com/uploads/${category['image_url']}',
-                                  ),
-                                  fit: BoxFit.cover,
-                                ),
-                        ),
-                        child: _newImage == null
-                            ? Center(
-                                child: Icon(Icons.add_a_photo,
-                                    size: 40, color: Colors.grey),
-                              )
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(isArabic ? "إلغاء" : 'پەشیمان بوون'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple),
-                  onPressed: _updateCategory,
-                  child: Text(
-                    isArabic ? "تحديث" : 'نویژەنکرن',
-                    style: TextStyle(color: Colors.white),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+            title: Text(S.addCategoryEditTitle.of(ctx),
+                style: const TextStyle(fontFamily: 'NotoKufi')),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                  controller: _editNameController,
+                  style: const TextStyle(fontFamily: 'NotoKufi'),
+                  decoration: InputDecoration(
+                    labelText: S.addCategoryEditNameLabel.of(ctx),
+                    labelStyle: const TextStyle(fontFamily: 'NotoKufi'),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
                   ),
                 ),
-              ],
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () async {
+                    await _pickNewImage();
+                    setS(() {});
+                  },
+                  child: Container(
+                    height: 90,
+                    width: 90,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                      image: _newImage != null
+                          ? DecorationImage(
+                              image: kIsWeb
+                                  ? MemoryImage(_imageBytes!)
+                                  : FileImage(File(_newImage!.path))
+                                      as ImageProvider,
+                              fit: BoxFit.cover)
+                          : DecorationImage(
+                              image: NetworkImage(
+                                  '${AppConstants.uploadsUrl}${category['image_url']}'),
+                              fit: BoxFit.cover),
+                    ),
+                    child: _newImage == null
+                        ? const Center(
+                            child: Icon(Icons.add_a_photo,
+                                size: 28, color: Colors.grey))
+                        : null,
+                  ),
+                ),
+              ]),
             ),
-          );
-        },
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(S.addCategoryEditCancel.of(ctx),
+                      style: const TextStyle(
+                          fontFamily: 'NotoKufi', color: AppTheme.primary))),
+              ElevatedButton(
+                style:
+                    ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                onPressed: updateCategory,
+                child: Text(S.addCategoryEditUpdate.of(ctx),
+                    style: const TextStyle(
+                        fontFamily: 'NotoKufi', color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
+  void _snack(String msg, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg,
+          style: const TextStyle(
+              fontFamily: 'NotoKufi',
+              fontWeight: FontWeight.bold,
+              color: Colors.white),
+          textAlign: TextAlign.center),
+      backgroundColor: success ? Colors.green : AppTheme.error,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      duration: const Duration(seconds: 3),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final user = Provider.of<UserModel>(context);
+    Provider.of<UserModel>(context);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.deepPurple,
-          iconTheme: IconThemeData(color: Colors.white),
-          title: Text(
-            isArabic ? "إضافة فئة جديدة" : 'زێدەکرنا کارەکێ نوی',
-            style: TextStyle(color: Colors.white, fontFamily: 'NotoKufi'),
-          ),
-        ),
-        drawer: CustomDrawer(),
-        body: Column(
+    return AppScaffold(
+      title: S.addCategoryTitle.of(context),
+      body: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(20.0),
+            // ── Add form ──
+            Container(
+              margin: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                boxShadow: AppTheme.elevatedShadow,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
                     controller: _categoryController,
                     textDirection: TextDirection.rtl,
+                    style: const TextStyle(fontFamily: 'NotoKufi'),
                     decoration: InputDecoration(
-                      labelText: isArabic ? "اسم الفئة" : 'ناڤێ جۆرێ کارێ',
-                      prefixIcon:
-                          Icon(Icons.category, color: Colors.deepPurple),
-                      border: OutlineInputBorder(),
+                      labelText: S.addCategoryNameHint.of(context),
+                      labelStyle: const TextStyle(fontFamily: 'NotoKufi'),
+                      prefixIcon: const Icon(Icons.category_rounded,
+                          color: AppTheme.primary),
+                      border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusSm)),
                     ),
                   ),
-                  SizedBox(height: 20),
-                  GestureDetector(
-                    onTap: _pickImage,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(8),
-                        image: _selectedImage != null
-                            ? DecorationImage(
-                                image: kIsWeb
-                                    ? NetworkImage(_selectedImage!.path)
-                                    : FileImage(File(_selectedImage!.path))
-                                        as ImageProvider,
-                                fit: BoxFit.cover,
-                              )
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: AppTheme.primary.withOpacity(0.4)),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusSm),
+                          color: AppTheme.background,
+                          image: _selectedImage != null
+                              ? DecorationImage(
+                                  image: kIsWeb
+                                      ? NetworkImage(_selectedImage!.path)
+                                      : FileImage(File(_selectedImage!.path))
+                                          as ImageProvider,
+                                  fit: BoxFit.cover)
+                              : null,
+                        ),
+                        child: _selectedImage == null
+                            ? const Center(
+                                child: Icon(Icons.add_a_photo,
+                                    size: 28, color: AppTheme.primary))
                             : null,
                       ),
-                      child: _selectedImage == null
-                          ? Center(
-                              child: Icon(Icons.add_a_photo,
-                                  size: 40, color: Colors.grey),
-                            )
-                          : null,
                     ),
-                  ),
-                  SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple),
-                    onPressed: _isLoading ? null : _addCategory,
-                    child: _isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            isArabic ? "إضافة" : 'زیادکردن',
-                            style: TextStyle(
-                                color: Colors.white, fontFamily: 'NotoKufi'),
-                          ),
-                  ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusSm)),
+                        ),
+                        onPressed: _isLoading ? null : _addCategory,
+                        icon: _isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.add_rounded,
+                                color: Colors.white),
+                        label: Text(
+                          S.addCategoryAddButton.of(context),
+                          style: const TextStyle(
+                              fontFamily: 'NotoKufi',
+                              color: Colors.white,
+                              fontSize: 15),
+                        ),
+                      ),
+                    ),
+                  ]),
                 ],
               ),
             ),
-            Divider(height: 20),
+            const Divider(height: 1),
+            // ── Category grid ──
             Expanded(
               child: _categories.isEmpty
                   ? Center(
                       child: Text(
-                        isArabic
-                            ? "لم يتم العثور على فئة."
-                            : 'چ کار نەهاتنە دیتن',
-                        style: TextStyle(fontFamily: 'NotoKufi', fontSize: 16),
+                          S.addCategoryEmpty.of(context),
+                          style: const TextStyle(
+                              fontFamily: 'NotoKufi',
+                              fontSize: 15,
+                              color: Colors.grey)))
+                  : GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount:
+                            MediaQuery.of(context).size.width > 600 ? 4 : 2,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 0.75,
                       ),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        final crossAxisCount =
-                            constraints.maxWidth > 600 ? 4 : 2;
-                        return GridView.builder(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: crossAxisCount,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 0.75,
-                          ),
-                          itemCount: _categories.length,
-                          itemBuilder: (context, index) {
-                            return _buildCategoryCard(_categories[index]);
-                          },
-                        );
-                      },
+                      itemCount: _categories.length,
+                      itemBuilder: (_, i) => _buildCategoryCard(_categories[i]),
                     ),
             ),
           ],
         ),
+      );
+  }
+
+  Widget _buildCategoryCard(Map<String, dynamic> cat) {
+    final bool isActive = int.tryParse(cat['is_active'].toString()) == 1;
+    final String imageUrl = cat['image_url']?.isNotEmpty == true
+        ? '${AppConstants.uploadsUrl}${cat['image_url']}'
+        : '';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isActive ? Colors.white : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: imageUrl.isNotEmpty
+                        ? Image.network(imageUrl,
+                            height: 72,
+                            width: 72,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.category_rounded,
+                                size: 48,
+                                color: Colors.grey))
+                        : const Icon(Icons.category_rounded,
+                            size: 48, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(cat['name'],
+                      style: TextStyle(
+                          fontFamily: 'NotoKufi',
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isActive ? AppTheme.primary : Colors.grey),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_rounded,
+                    size: 18, color: AppTheme.accent),
+                onPressed: () => _showEditDialog(cat),
+                padding: EdgeInsets.zero,
+              ),
+              IconButton(
+                icon: Icon(
+                    isActive
+                        ? Icons.check_circle_rounded
+                        : Icons.cancel_rounded,
+                    size: 18,
+                    color: isActive ? Colors.green : Colors.red),
+                onPressed: () => _toggleCategoryStatus(cat['id'].toString()),
+                padding: EdgeInsets.zero,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded,
+                    size: 18, color: Colors.redAccent),
+                onPressed: () => _confirmDelete(cat['id'].toString()),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }

@@ -1,122 +1,105 @@
+// lib/screens/save_success_page.dart
+
 import 'package:flutter/material.dart';
 
-import 'package:provider/provider.dart'; // Import Provider
-
-import '../widgets/custom_drawer.dart'; // Import CustomDrawer
-import '../models/user_model.dart';
-import 'dashboard_screen.dart'; // Import UserModel
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../widgets/app_scaffold.dart';
 
 class SaveSuccessPage extends StatelessWidget {
+  const SaveSuccessPage({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          flexibleSpace: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.deepPurple, Colors.blueAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return AppScaffold(
+      title: S.saveSuccessAppBarTitle.of(context),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 16),
+
+            // ── Big success icon ──
+            Center(
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withOpacity(0.10),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: AppTheme.success.withOpacity(0.30), width: 2),
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  size: 78,
+                  color: AppTheme.success,
+                ),
               ),
             ),
-          ),
-          title: Text(
-            isArabic
-                ? "تم حفظ المعلومات بنجاح"
-                : "زانیاری بە سەرکەوتوویی زیادکرا",
-            style: TextStyle(
-              fontFamily: 'NotoKufi',
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            const SizedBox(height: 24),
+
+            // ── Title ──
+            Text(
+              S.saveSuccessTitle.of(context),
+              style: AppTheme.headingMedium.copyWith(
+                fontSize: 20,
+                color: AppTheme.success,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        drawer: CustomDrawer(), // Use CustomDrawer
-        body: Container(
-          height: MediaQuery.of(context).size.height,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.white, Colors.blueAccent.withOpacity(0.1)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            const SizedBox(height: 18),
+
+            // ── Body card (success-tinted) ──
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(
+                    color: AppTheme.success.withOpacity(0.25), width: 1),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.check_circle_outline,
-                    size: 100,
-                    color: Colors.green,
-                  ),
-                  SizedBox(height: 20),
-                  Text(
-                    isArabic
-                        ? "تم حفظ المعلومات بنجاح!"
-                        : "زانیاری بە سەرکەوتوویی زیادکرا!",
-                    style: TextStyle(
-                      fontFamily: 'NotoKufi',
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.18),
+                      shape: BoxShape.circle,
                     ),
-                    textAlign: TextAlign.center,
+                    child: const Icon(Icons.info_outline_rounded,
+                        color: AppTheme.success, size: 20),
                   ),
-                  SizedBox(height: 10),
-                  Text(
-                    isArabic
-                        ? "سنتواصل معك في أقرب وقت لإنهاء العملية."
-                        : "ئێمە پەیوەندی پێوە دەکەین لە نزیکترین کاتدا بۆ تەواوکردنی کارەکەت.",
-                    style: TextStyle(
-                      fontFamily: 'NotoKufi',
-                      fontSize: 18,
-                      color: Colors.black87,
-                      height: 1.6,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 30),
-                  ElevatedButton(
-                    onPressed: () {
-                      // Navigate to the DashboardPage
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => DashboardScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      padding:
-                          EdgeInsets.symmetric(vertical: 15, horizontal: 30),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                    ),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Text(
-                      isArabic
-                          ? "العودة إلى الصفحة الرئيسية"
-                          : "گەڕانەوە بۆ پەری سەرکی",
-                      style: TextStyle(
-                        fontFamily: 'NotoKufi',
-                        fontSize: 18,
-                        color: Colors.white,
+                      S.saveSuccessBody.of(context),
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.textSecondary,
+                        height: 1.6,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+            const SizedBox(height: 28),
+
+            // ── Primary CTA ──
+            SizedBox(
+              height: AppTheme.buttonHeight,
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    Navigator.pushReplacementNamed(context, '/dashboard'),
+                icon: const Icon(Icons.home_rounded, size: 18),
+                label: Text(S.saveSuccessButton.of(context)),
+              ),
+            ),
+          ],
         ),
       ),
     );

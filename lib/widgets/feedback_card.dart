@@ -1,200 +1,171 @@
 // lib/widgets/feedback_card.dart
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../core/app_theme.dart';
 
 class FeedbackCard extends StatelessWidget {
   final Map<String, dynamic> feedback;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
-  FeedbackCard({
+  const FeedbackCard({
     required this.feedback,
     required this.onDelete,
     required this.onTap,
-  });
+    Key? key,
+  }) : super(key: key);
 
-  /// Generates initials from the user's name
-  String _getInitials(String name) {
-    List<String> names = name.trim().split(" ");
-    String initials = "";
-    for (var part in names) {
-      if (part.isNotEmpty) {
-        initials += part[0];
-      }
-    }
-    return initials.toUpperCase();
+  String _initials(String name) {
+    final parts = name.trim().split(' ');
+    return parts.map((p) => p.isNotEmpty ? p[0] : '').join().toUpperCase();
   }
 
-  /// Formats the phone number for WhatsApp
-  String _formatPhoneNumber(String phoneNumber) {
-    // Remove all non-digit characters
-    String cleanedNumber = phoneNumber.replaceAll(RegExp(r'\D'), '');
-
-    // Remove leading zero if present
-    if (cleanedNumber.startsWith('0')) {
-      cleanedNumber = cleanedNumber.substring(1);
-    }
-
-    // Add Iraq country code
-    String whatsappNumber = '964' + cleanedNumber;
-
-    return whatsappNumber;
+  String _formatPhone(String phone) {
+    String n = phone.replaceAll(RegExp(r'\D'), '');
+    if (n.startsWith('0')) n = n.substring(1);
+    return '964$n';
   }
 
-  /// Launches WhatsApp with the formatted phone number
-  Future<void> _launchWhatsApp(BuildContext context, String phoneNumber) async {
-    if (phoneNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('ژمارەی مۆبایل نادیارە')),
-      );
-      return;
+  Future<void> _openWhatsApp(BuildContext context, String phone) async {
+    if (phone.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/${_formatPhone(phone)}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
 
-    String formattedNumber = _formatPhoneNumber(phoneNumber);
-
-    // WhatsApp URL scheme
-    Uri whatsappUri = Uri.parse('https://wa.me/$formattedNumber');
-
-    // Check if WhatsApp can be launched
-    if (await canLaunchUrl(whatsappUri)) {
-      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('ئەم ژمارەیە لە WhatsApp بەردەست نیە')),
-      );
+  String _formatTimestamp(String? ts) {
+    if (ts == null || ts.isEmpty) return '';
+    try {
+      final d = DateTime.parse(ts);
+      return '${d.day}/${d.month}/${d.year}  ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic colors based on theme
-    Color avatarBackground = Theme.of(context).brightness == Brightness.dark
-        ? Colors.deepPurpleAccent.shade700
-        : Colors.deepPurpleAccent;
+    final name = feedback['name'] ?? '';
+    final phone = feedback['phone_number'] ?? '';
+    final msg = feedback['message'] ?? 'پەیام نادیارە';
+    final ts = _formatTimestamp(feedback['timestamp']);
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        boxShadow: AppTheme.elevatedShadow,
       ),
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Row with Avatar, Name, Phone, and Actions
+              // ── Header row ──────────────────────────────
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // User Avatar
+                  // Avatar
                   CircleAvatar(
-                    radius: 24,
-                    backgroundColor: avatarBackground,
+                    radius: 22,
+                    backgroundColor: AppTheme.primary.withOpacity(0.12),
                     child: Text(
-                      feedback['name'].isNotEmpty
-                          ? _getInitials(feedback['name'])
-                          : 'U',
-                      style: TextStyle(
-                        color: Colors.white,
+                      name.isNotEmpty ? _initials(name) : '?',
+                      style: const TextStyle(
+                        fontFamily: 'NotoKufi',
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: 15,
+                        color: AppTheme.primary,
                       ),
                     ),
                   ),
-                  SizedBox(width: 12),
-                  // Name and Phone Number
+                  const SizedBox(width: 12),
+                  // Name + phone
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          feedback['name'] ?? 'ناوی بەکارهێنەر',
-                          style: TextStyle(
+                          name.isNotEmpty ? name : 'ناوی بەکارهێنەر',
+                          style: const TextStyle(
                             fontFamily: 'NotoKufi',
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: Colors.black87,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         GestureDetector(
-                          onTap: () => _launchWhatsApp(
-                              context, feedback['phone_number']),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.phone,
-                                size: 14,
-                                color: Colors.grey,
+                          onTap: () => _openWhatsApp(context, phone),
+                          child: Row(children: [
+                            const FaIcon(FontAwesomeIcons.whatsapp,
+                                size: 14, color: Colors.green),
+                            const SizedBox(width: 5),
+                            Text(
+                              phone.isNotEmpty
+                                  ? phone
+                                  : 'ژمارەی مۆبایل نادیارە',
+                              style: const TextStyle(
+                                fontFamily: 'NotoKufi',
+                                fontSize: 13,
+                                color: Colors.blueAccent,
+                                decoration: TextDecoration.underline,
                               ),
-                              SizedBox(width: 4),
-                              Text(
-                                feedback['phone_number'] ??
-                                    'ژمارەی مۆبایل نادیارە',
-                                style: TextStyle(
-                                  fontFamily: 'NotoKufi',
-                                  fontSize: 14,
-                                  color: Colors.blueAccent, // Clickable color
-                                  decoration: TextDecoration
-                                      .underline, // Indicate clickable
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ]),
                         ),
                       ],
                     ),
                   ),
-                  // Delete Button
+                  // Delete button
                   IconButton(
-                    icon: Icon(
-                      Icons.delete,
-                      color: Colors.redAccent,
-                    ),
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: Colors.redAccent, size: 22),
                     onPressed: onDelete,
                     tooltip: 'سڕینەوەی فیدباک',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
-              SizedBox(height: 12),
-              // Feedback Message
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              // ── Message ──────────────────────────────────
               Text(
-                feedback['message'] ?? 'پەیام نادیارە',
-                style: TextStyle(
+                msg,
+                style: const TextStyle(
                   fontFamily: 'NotoKufi',
-                  fontSize: 15,
+                  fontSize: 14,
                   color: Colors.black87,
+                  height: 1.6,
                 ),
               ),
-              SizedBox(height: 12),
-              // Timestamp or Additional Info
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  _formatTimestamp(feedback['timestamp']),
-                  style: TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 12,
-                    color: Colors.grey[500],
+              if (ts.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    ts,
+                    style: TextStyle(
+                      fontFamily: 'NotoKufi',
+                      fontSize: 11,
+                      color: Colors.grey.shade400,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
       ),
     );
-  }
-
-  /// Formats the timestamp into a readable format
-  String _formatTimestamp(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return '';
-    DateTime parsedDate = DateTime.parse(timestamp);
-    return '${parsedDate.day}/${parsedDate.month}/${parsedDate.year} ${parsedDate.hour}:${parsedDate.minute.toString().padLeft(2, '0')}';
   }
 }

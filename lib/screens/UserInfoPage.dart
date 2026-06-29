@@ -1,13 +1,20 @@
+// lib/screens/UserInfoPage.dart
+
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
-import '../widgets/custom_drawer.dart';
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
 import '../models/user_model.dart';
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
 import 'InsertDetailsPageNo.dart';
 
 class UserInfoPage extends StatefulWidget {
+  const UserInfoPage({Key? key}) : super(key: key);
+
   @override
   _UserInfoPageState createState() => _UserInfoPageState();
 }
@@ -20,25 +27,20 @@ class _UserInfoPageState extends State<UserInfoPage> {
   @override
   void initState() {
     super.initState();
-    print("UserInfoPage: initState called.");
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchUserInfo();
-    });
+    AppLogger.info('UserInfoPage init', tag: 'USERINFO');
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchUserInfo());
   }
 
   Future<void> _fetchUserInfo() async {
-    print("UserInfoPage: _fetchUserInfo started.");
-
-    // Access the UserModel from Provider
     final userModel = Provider.of<UserModel>(context, listen: false);
     final phoneNumber = userModel.phoneNumber.trim();
     final currentRole = userModel.role;
 
-    print("UserInfoPage: Retrieved phone number: '$phoneNumber'");
-    print("UserInfoPage: Retrieved role: '$currentRole'");
+    AppLogger.info('Fetching user info for: $phoneNumber', tag: 'USERINFO');
 
     if (phoneNumber.isEmpty) {
-      print("UserInfoPage: Phone number is empty. Cannot fetch user info.");
+      AppLogger.warning('Phone number is empty — cannot fetch',
+          tag: 'USERINFO');
       setState(() {
         _hasError = true;
         _isLoading = false;
@@ -46,60 +48,41 @@ class _UserInfoPageState extends State<UserInfoPage> {
       return;
     }
 
-    final url = Uri.parse(
-        'https://legaryan.heama-soft.com/get_user_info.php?phone_number=$phoneNumber');
-    print("UserInfoPage: API URL - $url");
+    final response = await ApiService.instance.get(
+      AppConstants.getUserInfoEndpoint,
+      queryParams: {'phone_number': phoneNumber},
+    );
 
-    try {
-      final response = await http.get(url);
-      print("UserInfoPage: HTTP GET Response Status: ${response.statusCode}");
+    if (!mounted) return;
 
-      if (response.statusCode == 200) {
-        print("UserInfoPage: Received response body: ${response.body}");
-        final jsonResponse = json.decode(response.body);
-        print("UserInfoPage: Parsed JSON Response: $jsonResponse");
-
-        if (jsonResponse['success'] == true) {
-          if (jsonResponse['data'] == null) {
-            print("UserInfoPage: 'data' field is null in JSON response.");
-            setState(() {
-              _hasError = true;
-              _isLoading = false;
-            });
-            return;
-          }
-          setState(() {
-            _userInfo = Map<String, dynamic>.from(jsonResponse['data']);
-            _isLoading = false;
-            _hasError = false;
-          });
-          print("UserInfoPage: User info fetched: $_userInfo");
-
-          // Update UserModel with fetched data while retaining the role
-          userModel.setUser(
-            _userInfo!['full_name'] ?? '',
-            _userInfo!['phone_number'] ?? '',
-            currentRole,
-            city: _userInfo!['city'] ?? '',
-          );
-          print("UserInfoPage: UserModel updated with fetched data.");
-        } else {
-          print("UserInfoPage: API returned success=false.");
-          setState(() {
-            _hasError = true;
-            _isLoading = false;
-          });
-        }
+    if (response.success && response.data != null) {
+      final data = response.data!;
+      if (data['success'] == true && data['data'] != null) {
+        AppLogger.info('User info loaded successfully', tag: 'USERINFO');
+        final info = Map<String, dynamic>.from(data['data'] as Map);
+        setState(() {
+          _userInfo = info;
+          _isLoading = false;
+          _hasError = false;
+        });
+        // Update UserModel while keeping role
+        userModel.setUser(
+          info['full_name'] ?? '',
+          info['phone_number'] ?? '',
+          currentRole,
+          city: info['city'] ?? '',
+        );
       } else {
-        print(
-            "UserInfoPage: HTTP GET failed with status: ${response.statusCode}");
+        AppLogger.warning('User info API returned success=false',
+            tag: 'USERINFO');
         setState(() {
           _hasError = true;
           _isLoading = false;
         });
       }
-    } catch (error) {
-      print("UserInfoPage: Exception caught: $error");
+    } else {
+      AppLogger.error('User info fetch failed: ${response.error}',
+          tag: 'USERINFO');
       setState(() {
         _hasError = true;
         _isLoading = false;
@@ -109,270 +92,330 @@ class _UserInfoPageState extends State<UserInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    print("UserInfoPage: build called.");
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: _buildAppBar(isArabic),
-        drawer: CustomDrawer(),
-        body: _buildBody(isArabic),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(bool isArabic) {
-    print("UserInfoPage: Building AppBar.");
-    return AppBar(
-      flexibleSpace: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.deepPurple, Colors.blueAccent],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-      ),
-      title: Text(
-        isArabic ? "معلومات المستخدم" : 'زانیاری بەکارھێنەر',
-        style: TextStyle(
-          fontFamily: 'NotoKufi',
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-      ),
-      iconTheme: IconThemeData(color: Colors.white),
-    );
-  }
-
-  Widget _buildBody(bool isArabic) {
-    print("UserInfoPage: Building Body.");
-    return Container(
-      height: MediaQuery.of(context).size.height,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, Colors.blueAccent.withOpacity(0.1)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: _isLoading
-          ? _buildLoadingIndicator()
+    return AppScaffold(
+      title: S.userInfoTitle.of(context),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.accent))
           : _hasError
-              ? _buildErrorMessage(isArabic)
-              : _buildUserInfoContent(isArabic),
+              ? _buildError(context)
+              : _buildContent(context),
     );
   }
 
-  Widget _buildLoadingIndicator() {
-    print("UserInfoPage: Building Loading Indicator.");
-    return Center(
-      child: CircularProgressIndicator(color: Colors.deepPurple),
-    );
-  }
+  // ── Error state ───────────────────────────────────────────
 
-  Widget _buildErrorMessage(bool isArabic) {
-    print("UserInfoPage: Building Error Message.");
+  Widget _buildError(BuildContext context) {
     return Center(
-      child: Text(
-        isArabic
-            ? "خطأ: لم يتم العثور على المعلومات."
-            : "هەڵە: زانیاری نەدۆزرایەوە.",
-        style: TextStyle(
-          fontFamily: 'NotoKufi',
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.redAccent,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded,
+                size: 64, color: AppTheme.error),
+            const SizedBox(height: 16),
+            Text(
+              S.userInfoErrorBody.of(context),
+              style: AppTheme.bodyMedium.copyWith(color: AppTheme.error),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 200,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _hasError = false;
+                  });
+                  _fetchUserInfo();
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(S.retry.of(context)),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildUserInfoContent(bool isArabic) {
-    print("UserInfoPage: Building User Info Content.");
-    return SingleChildScrollView(
+  // ── Content ───────────────────────────────────────────────
+
+  Widget _buildContent(BuildContext context) {
+    final userModel = Provider.of<UserModel>(context, listen: false);
+
+    return RefreshIndicator(
+      onRefresh: _fetchUserInfo,
+      color: AppTheme.accent,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeroCard(context),
+            const SizedBox(height: 18),
+            _buildInfoCard(context),
+            const SizedBox(height: 14),
+            _buildThanksNote(context),
+            const SizedBox(height: 22),
+            _buildAddMoreButton(context, userModel),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Hero card ─────────────────────────────────────────────
+
+  Widget _buildHeroCard(BuildContext context) {
+    final fullName = _userInfo?['full_name']?.toString() ?? '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: AppTheme.appBarGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.appBarShadow,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(height: 30),
-          _buildLogo(),
-          _buildWelcomeMessage(isArabic),
-          _buildUserInfoCard(isArabic),
-          _buildThankYouMessage(isArabic),
-          _buildAddMoreDataButton(isArabic),
-          SizedBox(height: 30),
+          // Logo / avatar in a layered circle
+          Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.16),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white38, width: 1.5),
+            ),
+            child: Center(
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/logo.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.person_rounded,
+                          size: 30, color: AppTheme.primary),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            S.userInfoThanksTitle.of(context),
+            style: AppTheme.headingLarge.copyWith(fontSize: 20),
+            textAlign: TextAlign.center,
+          ),
+          if (fullName.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.20),
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                border: Border.all(color: Colors.white38, width: 0.8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified_user_rounded,
+                      size: 12, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(
+                    fullName,
+                    style: const TextStyle(
+                      fontFamily: 'NotoKufi',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            S.userInfoSubtitle.of(context),
+            style: AppTheme.captionWhite.copyWith(fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLogo() {
-    print("UserInfoPage: Building Logo.");
-    return Column(
-      children: [
-        Image.asset(
-          'assets/logo.png',
-          height: 120,
-          width: 120,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            print("UserInfoPage: Error loading logo: $error");
-            return Icon(Icons.error, size: 120, color: Colors.red);
-          },
-        ),
-        SizedBox(height: 10),
-      ],
+  // ── Info card ─────────────────────────────────────────────
+
+  Widget _buildInfoCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _infoRow(
+            icon: Icons.person_rounded,
+            iconColor: AppTheme.primary,
+            label: S.userInfoFullNameLabel.of(context),
+            value: _userInfo?['full_name']?.toString() ?? '—',
+          ),
+          const Divider(height: 22),
+          _infoRow(
+            icon: Icons.phone_rounded,
+            iconColor: AppTheme.accent,
+            label: S.phoneNumberLabelColon.of(context),
+            value: _userInfo?['phone_number']?.toString() ?? '—',
+            monospace: true,
+          ),
+          const Divider(height: 22),
+          _infoRow(
+            icon: Icons.location_city_rounded,
+            iconColor: AppTheme.success,
+            label: S.cityLabelColon.of(context),
+            value: _userInfo?['city']?.toString() ?? '—',
+          ),
+          const Divider(height: 22),
+          _infoRow(
+            icon: Icons.work_rounded,
+            iconColor: AppTheme.primary,
+            label: S.workTypeLabelColon.of(context),
+            value: _userInfo?['type_of_work']?.toString() ?? '—',
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildWelcomeMessage(bool isArabic) {
-    print("UserInfoPage: Building Welcome Message.");
-    return Column(
+  Widget _infoRow({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+    bool monospace = false,
+  }) {
+    return Row(
       children: [
-        Text(
-          isArabic ? "شكراً للتسجيل!" : 'سوپاس بۆ تۆمارکردن!',
-          style: TextStyle(
-            fontFamily: 'NotoKufi',
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.deepPurple,
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(10),
           ),
-          textAlign: TextAlign.center,
+          child: Icon(icon, color: iconColor, size: 20),
         ),
-        SizedBox(height: 10),
-        Text(
-          isArabic ? "معلومات المستخدم:" : 'زانیاری تایبەتی بەکارھێنەر:',
-          style: TextStyle(
-            fontFamily: 'NotoKufi',
-            fontSize: 18,
-            color: Colors.black54,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUserInfoCard(bool isArabic) {
-    print("UserInfoPage: Building User Info Card.");
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Card(
-        elevation: 6,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
+        const SizedBox(width: 14),
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildInfoRow(isArabic ? "الاسم الكامل:" : 'ناوی تەواو:',
-                  _userInfo!['full_name'] ?? 'N/A'),
-              Divider(),
-              _buildInfoRow(isArabic ? "رقم الهاتف:" : 'ژمارەی مۆبایل:',
-                  _userInfo!['phone_number'] ?? 'N/A'),
-              Divider(),
-              _buildInfoRow(
-                  isArabic ? "المدينة:" : 'شار:', _userInfo!['city'] ?? 'N/A'),
-              Divider(),
-              _buildInfoRow(isArabic ? "نوع العمل:" : 'جۆری کار:',
-                  _userInfo!['type_of_work'] ?? 'N/A'),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: 'NotoKufi',
+                  fontSize: 12,
+                  color: AppTheme.textMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  fontFamily: monospace ? null : 'NotoKufi',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: monospace ? 0.5 : 0,
+                ),
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildThankYouMessage(bool isArabic) {
-    print("UserInfoPage: Building Thank You Message.");
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Text(
-        isArabic
-            ? "شكراً للتسجيل! سنتواصل معك قريباً لإنهاء عملك."
-            : 'سوپاس بۆ تۆمارکردن! ئێمە پەیوەندی پێوە دەکەین لە نزیکترین کاتدا بۆ تەواوکردنی کارەکەت.',
-        style: TextStyle(
-          fontFamily: 'NotoKufi',
-          fontSize: 18,
-          color: Colors.black87,
-          height: 1.6,
-        ),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  Widget _buildAddMoreDataButton(bool isArabic) {
-    print("UserInfoPage: Building Add More Data Button.");
-    final userModel = Provider.of<UserModel>(context, listen: false);
-    final phoneNumber = userModel.phoneNumber;
-    final city = userModel.city;
-
-    return ElevatedButton.icon(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => InsertDetailsPageNo(
-              phoneNumber: phoneNumber,
-              city: city,
-            ),
-          ),
-        );
-      },
-      icon: Icon(Icons.add, color: Colors.white),
-      label: Text(
-        isArabic ? "إضافة المزيد من المعلومات" : 'زیادکردنی زانیاری زیاتر',
-        style: TextStyle(
-          fontFamily: 'NotoKufi',
-          fontSize: 18,
-          color: Colors.white,
-        ),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.deepPurple,
-        padding: EdgeInsets.symmetric(vertical: 15, horizontal: 30),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(25),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    print("UserInfoPage: Building Info Row - $label $value");
-    return Row(
-      children: [
-        Icon(Icons.info_outline, color: Colors.deepPurple, size: 24),
-        SizedBox(width: 10),
-        Expanded(
-          child: RichText(
-            text: TextSpan(
-              text: '$label ',
-              style: TextStyle(
-                fontFamily: 'NotoKufi',
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black54,
-              ),
-              children: [
-                TextSpan(
-                  text: value,
-                  style: TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 16,
-                    fontWeight: FontWeight.normal,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
+    );
+  }
+
+  // ── Thanks note ───────────────────────────────────────────
+
+  Widget _buildThanksNote(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.accent.withOpacity(0.20), width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withOpacity(0.14),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.info_outline_rounded,
+                color: AppTheme.accent, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              S.userInfoThankYouMessage.of(context),
+              style: AppTheme.bodySmall.copyWith(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+                height: 1.6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Add-more CTA ──────────────────────────────────────────
+
+  Widget _buildAddMoreButton(BuildContext context, UserModel userModel) {
+    return SizedBox(
+      width: double.infinity,
+      height: AppTheme.buttonHeight,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          AppLogger.info('Navigate to InsertDetailsPageNo', tag: 'USERINFO');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => InsertDetailsPageNo(
+                phoneNumber: userModel.phoneNumber,
+                city: userModel.city,
+              ),
+            ),
+          );
+        },
+        icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+        label: Text(S.userInfoAddMore.of(context)),
+      ),
     );
   }
 }

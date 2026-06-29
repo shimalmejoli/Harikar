@@ -1,53 +1,71 @@
 workflows:
   ios-release-workflow:
-    name: Build iOS Release (Harikar)
+    name: Build & Submit iOS (Harikar)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    # Your Apple Developer Portal / App Store Connect API key in Codemagic
+    # is named "Harikar" (Key ID LZ72XZ3TCQ). This provides auth for both
+    # code signing and publishing.
+    integrations:
+      app_store_connect: Harikar
+
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
+      vars:
+        BUNDLE_ID: "com.heamasoft.harikar"
+        # App Store Connect → your app → App Information → "Apple ID"
+        # (a numeric value like 1234567890). Used to read the latest
+        # iOS build number so we never collide.
+        APP_STORE_APPLE_ID: "INSERT_YOUR_NUMERIC_APPLE_APP_ID"
+
+    # Push a version tag (e.g. `git tag v1.0.5 && git push origin v1.0.5`)
+    # to trigger a release build automatically.
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
 
     scripts:
-      # 1️⃣ Install Flutter packages
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # 2️⃣ Auto-increment build number only (Apple requires increasing build number)
-      - name: Auto-increment build number
+      # Decouple iOS build number from the Android versionCode in pubspec.
+      # Read the highest build number already on App Store Connect and add 1.
+      - name: Set iOS build number from App Store Connect
         script: |
-          VERSION_LINE=$(grep '^version:' pubspec.yaml)
-          VERSION=$(echo $VERSION_LINE | sed 's/version: //')
-          NAME=$(echo $VERSION | cut -d'+' -f1)
-          BUILD=$(echo $VERSION | cut -d'+' -f2)
-          NEW_BUILD=$((BUILD + 1))
-          echo "Updating version: $NAME+$NEW_BUILD"
-          sed -i '' "s/version: .*/version: $NAME+$NEW_BUILD/" pubspec.yaml
-          cat pubspec.yaml | grep version
+          set -e
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "0")
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then LATEST=0; fi
+          NEW_BUILD=$((LATEST + 1))
+          echo "Latest App Store build: $LATEST → using $NEW_BUILD"
+          echo "IOS_BUILD_NUMBER=$NEW_BUILD" >> "$CM_ENV"
 
-      # 3️⃣ Regenerate iOS files & Pods
       - name: Regenerate iOS project and Pods
         script: |
           flutter clean
           flutter pub get
-          rm -rf ios/Pods
-          rm -rf ios/Podfile
-          rm -rf ios/Podfile.lock
+          rm -rf ios/Pods ios/Podfile.lock
           flutter build ios --no-codesign
 
-      # 4️⃣ Disable Bitcode (still needed for older devices)
       - name: Disable Bitcode
         script: |
-          sed -i '' 's/ENABLE_BITCODE = YES;/ENABLE_BITCODE = NO;/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/ENABLE_BITCODE = YES;/ENABLE_BITCODE = NO;/g' ios/Runner.xcodeproj/project.pbxproj || true
 
-      # 5️⃣ Apple signing
-      - name: Set up keychain for code signing
+      - name: Set up keychain & fetch signing files
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files "com.heamasoft.harikar" --type IOS_APP_STORE
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
           keychain add-certificates
 
-      # 6️⃣ Build IPA
       - name: Build .ipa for release
-        script: flutter build ipa --release
+        script: |
+          flutter build ipa --release \
+            --build-number="$IOS_BUILD_NUMBER"
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -57,7 +75,12 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        submit_to_app_store: false
+        # Auto-submit to App Store review on every tagged release.
+        submit_to_app_store: true
+        # AFTER_APPROVAL = goes live automatically once Apple approves.
+        # Change to MANUAL if you'd rather click "Release" yourself.
+        release_type: AFTER_APPROVAL
+        cancel_previous_submissions: true
       email:
         recipients:
           - heama.soft@gmail.com

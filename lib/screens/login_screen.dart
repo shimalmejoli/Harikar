@@ -1,13 +1,21 @@
 // lib/screens/login_screen.dart
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../core/phone_utils.dart';
 import '../models/user_model.dart';
-import 'dashboard_screen.dart';
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({Key? key}) : super(key: key);
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -18,85 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
-  // ✅ Login function
-  Future<void> _login() async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final String input = _inputController.text.trim();
-    final String password = _passwordController.text.trim();
-
-    if (input.isEmpty || password.isEmpty) {
-      _showMessage(isArabic
-          ? "يجب إدخال رقم الهاتف أو اسم المستخدم وكلمة المرور."
-          : "ژمارەی مۆبایل یان ناڤی بەکارەوەر و وشەی نهێنی پێویستە.");
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final url = Uri.parse('https://legaryan.heama-soft.com/login.php');
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"input": input, "password": password}),
-      );
-
-      if (response.statusCode == 200 && response.body.isNotEmpty) {
-        final responseData = jsonDecode(response.body);
-
-        if (responseData['status'] == 'success') {
-          // ✅ Set user data in Provider
-          Provider.of<UserModel>(context, listen: false).setUser(
-            responseData['name'],
-            responseData['phone_number'],
-            responseData['role'],
-          );
-
-          // ✅ Save login state
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('isLoggedIn', true);
-          await prefs.setString('userName', responseData['name']);
-          await prefs.setString('phoneNumber', responseData['phone_number']);
-          await prefs.setString('role', responseData['role']);
-
-          // ✅ Save user_id (required for Delete Account)
-          if (responseData.containsKey('id')) {
-            await prefs.setInt(
-                'user_id', int.parse(responseData['id'].toString()));
-          }
-
-          _showMessage(responseData['message']);
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        } else {
-          _showMessage(responseData['message']);
-        }
-      } else {
-        _showMessage(isArabic
-            ? "استجابة غير صالحة من الخادم."
-            : "Invalid response from server.");
-      }
-    } catch (e) {
-      _showMessage(isArabic
-          ? "حدث خطأ: يرجى المحاولة مرة أخرى."
-          : "هەڵە ڕویدا: تکایە دوبارە هەوڵ بدە.");
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontFamily: 'NotoKufi'),
-        ),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _inputController.dispose();
@@ -104,160 +33,297 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _login() async {
+    String input = _inputController.text.trim();
+    final String password = _passwordController.text.trim();
+
+    if (input.isEmpty || password.isEmpty) {
+      _showMessage(S.loginPromptInputs.of(context));
+      return;
+    }
+
+    // If the user typed a phone number, normalize it (strip leading 0,
+    // spaces, country code). If they typed a username, leave it alone.
+    if (IqPhone.looksLikePhone(input)) {
+      input = IqPhone.normalize(input);
+    }
+
+    setState(() => _isLoading = true);
+    AppLogger.info('Login attempt: $input', tag: 'LOGIN');
+
+    final response = await ApiService.instance.post(
+      AppConstants.loginEndpoint,
+      jsonBody: {'input': input, 'password': password},
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (response.success && response.data != null) {
+      final data = response.data!;
+      if (data['status'] == 'success') {
+        AppLogger.info('Login success: ${data['name']}', tag: 'LOGIN');
+
+        Provider.of<UserModel>(context, listen: false).setUser(
+          data['name'],
+          data['phone_number'],
+          data['role'],
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+        await prefs.setString(AppConstants.prefUserName, data['name']);
+        await prefs.setString(
+            AppConstants.prefPhoneNumber, data['phone_number']);
+        await prefs.setString(AppConstants.prefRole, data['role']);
+        if (data.containsKey('id')) {
+          await prefs.setInt(
+              'user_id', int.tryParse(data['id'].toString()) ?? 0);
+        }
+
+        _showMessage(data['message'] ?? '', success: true);
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      } else {
+        AppLogger.warning('Login failed: ${data['message']}', tag: 'LOGIN');
+        _showMessage(data['message'] ?? S.loginFailed.of(context));
+      }
+    } else {
+      AppLogger.error('Login error: ${response.error}', tag: 'LOGIN');
+      _showMessage(S.loginNetworkError.of(context));
+    }
+  }
+
+  void _showMessage(String message, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: success ? AppTheme.success : AppTheme.error,
+    ));
+  }
+
+  // ── BUILD ────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.deepPurple,
-          title: Text(
-            isArabic ? "تسجيل الدخول" : 'چوونەژوورەوە',
-            style: const TextStyle(
-              color: Colors.white,
-              fontFamily: 'NotoKufi',
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          iconTheme: const IconThemeData(color: Colors.white),
-          elevation: 0,
+    return AppScaffold(
+      title: S.loginAppBarTitle.of(context),
+      showDrawer: false,
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHero(context),
+            const SizedBox(height: 18),
+            _buildFormCard(context),
+            const SizedBox(height: 14),
+            _buildRegisterPrompt(context),
+          ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Center(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Logo
-                  Image.asset('assets/logo.png', height: 100),
-                  const SizedBox(height: 30),
+      ),
+    );
+  }
 
-                  // Subtitle
-                  Text(
-                    isArabic
-                        ? "يرجى إدخال رقم الهاتف أو اسم المستخدم وكلمة المرور"
-                        : 'هێڤیە ژمارا مۆبایلێ یان ناڤ و پەیڤا نهێنی تومار بکە',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontFamily: 'NotoKufi',
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Username / Phone
-                  TextField(
-                    controller: _inputController,
-                    decoration: InputDecoration(
-                      labelText: isArabic
-                          ? "رقم الهاتف أو اسم المستخدم"
-                          : 'ژمارەی مۆبایل یان ناو',
-                      labelStyle: const TextStyle(fontFamily: 'NotoKufi'),
-                      prefixIcon:
-                          const Icon(Icons.person, color: Colors.deepPurple),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Password
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: !_isPasswordVisible,
-                    decoration: InputDecoration(
-                      labelText: isArabic ? "كلمة المرور" : 'پایڤا نهێنی',
-                      labelStyle: const TextStyle(fontFamily: 'NotoKufi'),
-                      prefixIcon:
-                          const Icon(Icons.lock, color: Colors.deepPurple),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _isPasswordVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: Colors.deepPurple,
-                        ),
-                        onPressed: () => setState(
-                            () => _isPasswordVisible = !_isPasswordVisible),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+  Widget _buildHero(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: AppTheme.appBarGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.appBarShadow,
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.16),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white38, width: 1.5),
+            ),
+            child: Center(
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/logo.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.login_rounded,
+                          size: 30, color: AppTheme.primary),
                     ),
                   ),
-                  const SizedBox(height: 30),
-
-                  // Login button
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: _isLoading ? null : _login,
-                    child: _isLoading
-                        ? const CircularProgressIndicator(
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          )
-                        : Text(
-                            isArabic ? "تسجيل الدخول" : 'چونا ژور',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontFamily: 'NotoKufi',
-                            ),
-                          ),
-                  ),
-
-                  // Forgot Password
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/forget_password');
-                    },
-                    child: Text(
-                      isArabic
-                          ? "هل نسيت كلمة المرور؟"
-                          : 'پەیڤا نهێنی ژ بیرا تە چوویە',
-                      style: const TextStyle(
-                        color: Colors.deepPurple,
-                        fontFamily: 'NotoKufi',
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Register button
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/register');
-                    },
-                    child: Text(
-                      isArabic
-                          ? "لم تقم بالتسجيل بعد؟ سجل الآن"
-                          : 'هێشتا تە خو تومار نەکریە! خو تومار بکە',
-                      style: const TextStyle(
-                        color: Colors.deepPurple,
-                        fontFamily: 'NotoKufi',
-                        fontSize: 16,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            S.loginAppBarTitle.of(context),
+            style: AppTheme.headingLarge.copyWith(fontSize: 20),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            S.loginInstruction.of(context),
+            style: AppTheme.captionWhite.copyWith(fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _fieldLabel(S.loginInputLabel.of(context)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _inputController,
+            keyboardType: TextInputType.phone,
+            style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 14),
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              hintText: S.loginInputLabel.of(context),
+              prefixIcon:
+                  const Icon(Icons.person_rounded, color: AppTheme.primary),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _fieldLabel(S.loginPasswordLabel.of(context)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _passwordController,
+            obscureText: !_isPasswordVisible,
+            style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 14),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _isLoading ? null : _login(),
+            decoration: InputDecoration(
+              hintText: S.loginPasswordLabel.of(context),
+              prefixIcon:
+                  const Icon(Icons.lock_rounded, color: AppTheme.primary),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _isPasswordVisible
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                  color: AppTheme.textMuted,
+                  size: 20,
+                ),
+                onPressed: () =>
+                    setState(() => _isPasswordVisible = !_isPasswordVisible),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/forget_password'),
+              icon: const Icon(Icons.help_outline_rounded, size: 16),
+              label: Text(S.loginForgotPassword.of(context)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: AppTheme.buttonHeight,
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _login,
+              icon: _isLoading
+                  ? const SizedBox.shrink()
+                  : const Icon(Icons.login_rounded, size: 18),
+              label: _isLoading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(S.loginButton.of(context)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRegisterPrompt(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        onTap: () => Navigator.pushReplacementNamed(context, '/register'),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border:
+                Border.all(color: AppTheme.primary.withOpacity(0.20), width: 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person_add_rounded,
+                    color: AppTheme.primary, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  S.loginRegisterPrompt.of(context),
+                  style: const TextStyle(
+                    fontFamily: 'NotoKufi',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  size: 14, color: AppTheme.primary),
+            ],
           ),
         ),
       ),
     );
   }
+
+  Widget _fieldLabel(String text) => Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'NotoKufi',
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.textSecondary,
+        ),
+      );
 }

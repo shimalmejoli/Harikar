@@ -1,36 +1,31 @@
 // lib/services/feedback_service.dart
+// ─────────────────────────────────────────────────────────────
+// Now uses ApiService instead of raw http calls.
+// ─────────────────────────────────────────────────────────────
 
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_service.dart';
 
 class FeedbackService {
-  final String apiUrl =
-      'https://legaryan.heama-soft.com/submit_feedback.php'; // Replace with your actual URL
+  FeedbackService._();
+  static final FeedbackService instance = FeedbackService._();
 
   Future<Map<String, dynamic>> submitFeedback(
-      String name, String phoneNumber, String message) async {
-    try {
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
-          'name': name,
-          'phone_number': phoneNumber,
-          'message': message,
-        }),
-      );
+    String name,
+    String phoneNumber,
+    String message,
+  ) async {
+    final response = await ApiService.instance.submitFeedback(
+      name,
+      phoneNumber,
+      message,
+    );
 
-      if (response.statusCode == 200) {
-        Map<String, dynamic> responseData = json.decode(response.body);
-        return responseData;
-      } else {
-        return {
-          "status": "error",
-          "message": "Server responded with status code ${response.statusCode}."
-        };
-      }
-    } catch (e) {
-      return {"status": "error", "message": "An error occurred: $e"};
+    if (response.success && response.data != null) {
+      return response.data!;
     }
+    return {
+      'status': 'error',
+      'message': response.error ?? 'Unknown error',
+    };
   }
 }

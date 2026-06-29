@@ -1,454 +1,433 @@
-// lib/screens/details_page.dart
+// lib/screens/DetailsPage.dart
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:cached_network_image/cached_network_image.dart';
 
-import '../widgets/custom_drawer.dart';
+import '../core/app_constants.dart';
+import '../core/app_logger.dart';
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
+import '../main.dart' show LocaleContext;
+import '../services/api_service.dart';
+import '../widgets/app_scaffold.dart';
 import 'UpdateDetailsPage.dart';
 
 class DetailsPage extends StatefulWidget {
+  const DetailsPage({Key? key}) : super(key: key);
   @override
   _DetailsPageState createState() => _DetailsPageState();
 }
 
 class _DetailsPageState extends State<DetailsPage> {
-  List<dynamic> _details = []; // Original data
-  List<dynamic> _filteredDetails = []; // Filtered data
+  List<dynamic> _details = [];
+  List<dynamic> _filteredDetails = [];
   List<String> _userNames = [];
-  List<String> _subCategoryNames = [];
+  List<String> _subCatNames = [];
 
-  String? _selectedUserName;
-  String? _selectedSubCategory;
-  final TextEditingController _searchController = TextEditingController();
+  String? _selectedUser;
+  String? _selectedSubCat;
+  final _searchCtrl = TextEditingController();
 
   bool _isLoading = true;
-  bool _didFetchDetails = false; // Flag to ensure data is fetched once
+  bool _didFetch = false;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_applyFilters);
-    // Remove _fetchDetails() from here
+    _searchCtrl.addListener(_applyFilters);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_didFetchDetails) {
+    if (!_didFetch) {
+      _didFetch = true;
       _fetchDetails();
-      _didFetchDetails = true;
     }
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _fetchDetails() async {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final url = Uri.parse('https://legaryan.heama-soft.com/get_details.php');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        if (responseData['status'] == 'success') {
-          setState(() {
-            _details = responseData['data'];
-            _filteredDetails = _details;
-            _extractDropdownOptions();
-            _isLoading = false;
-          });
-        } else {
-          _showMessage(isArabic
-              ? "خطأ في تحميل المعلومات"
-              : "هەڵە لە بارکردنی زانیاریەکان");
-        }
+    setState(() => _isLoading = true);
+    AppLogger.info('Fetching all details', tag: 'DETAILS_PAGE');
+
+    final response =
+        await ApiService.instance.get(AppConstants.getDetailsEndpoint);
+    if (!mounted) return;
+
+    if (response.success && response.data != null) {
+      final data = response.data!;
+      if (data['status'] == 'success') {
+        AppLogger.info('Details loaded: ${(data['data'] as List).length}',
+            tag: 'DETAILS_PAGE');
+        setState(() {
+          _details = data['data'] as List;
+          _filteredDetails = _details;
+          _extractDropdowns();
+          _isLoading = false;
+        });
+      } else {
+        AppLogger.error('Details API error: ${data['message']}',
+            tag: 'DETAILS_PAGE');
+        setState(() => _isLoading = false);
       }
-    } catch (e) {
-      _showMessage(isArabic ? "حدث خطأ: $e" : "هەڵەیەک ڕوویدا: $e");
+    } else {
+      AppLogger.error('Details fetch failed: ${response.error}',
+          tag: 'DETAILS_PAGE');
+      setState(() => _isLoading = false);
     }
   }
 
-  void _extractDropdownOptions() {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
+  void _extractDropdowns() {
     _userNames = _details
-        .map((item) =>
-            item['user_name']?.toString() ??
-            (isArabic ? "لا يوجد اسم مستخدم" : "ناوی بەکارهێنەر نییە"))
+        .map((i) => i['user_name']?.toString() ?? '')
         .toSet()
-        .toList()
-        .cast<String>();
-
-    _subCategoryNames = _details
-        .map((item) =>
-            item['sub_category_name']?.toString() ??
-            (isArabic ? "غير محدد" : "نەدیارە"))
+        .where((s) => s.isNotEmpty)
+        .toList();
+    _subCatNames = _details
+        .map((i) => i['sub_category_name']?.toString() ?? '')
         .toSet()
-        .toList()
-        .cast<String>();
+        .where((s) => s.isNotEmpty)
+        .toList();
   }
 
   void _applyFilters() {
-    final query = _searchController.text.toLowerCase();
-
+    final q = _searchCtrl.text.toLowerCase();
     setState(() {
       _filteredDetails = _details.where((item) {
-        final matchesUserName =
-            _selectedUserName == null || item['user_name'] == _selectedUserName;
-        final matchesSubCategory = _selectedSubCategory == null ||
-            item['sub_category_name'] == _selectedSubCategory;
-        final matchesSearch = query.isEmpty ||
-            (item['name']?.toLowerCase()?.contains(query) ?? false) ||
-            (item['user_name']?.toLowerCase()?.contains(query) ?? false);
-        return matchesUserName && matchesSubCategory && matchesSearch;
+        final matchUser =
+            _selectedUser == null || item['user_name'] == _selectedUser;
+        final matchSubCat = _selectedSubCat == null ||
+            item['sub_category_name'] == _selectedSubCat;
+        final matchSearch = q.isEmpty ||
+            (item['name']?.toString().toLowerCase().contains(q) ?? false) ||
+            (item['user_name']?.toString().toLowerCase().contains(q) ?? false);
+        return matchUser && matchSubCat && matchSearch;
       }).toList();
     });
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message, style: TextStyle(fontFamily: 'NotoKufi')),
-      backgroundColor: Colors.red,
-    ));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isArabic = Localizations.localeOf(context).languageCode == 'ar';
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.deepPurple,
-          title: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: isArabic
-                  ? "البحث باسم المعلومات..."
-                  : "گەڕان بەناوی زانیاری...",
-              hintStyle:
-                  TextStyle(color: Colors.white70, fontFamily: 'NotoKufi'),
-              border: InputBorder.none,
-              prefixIcon: Icon(Icons.search, color: Colors.white70),
-            ),
-            style: TextStyle(color: Colors.white, fontFamily: 'NotoKufi'),
-            cursorColor: Colors.white,
-          ),
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        drawer: CustomDrawer(),
-        backgroundColor: Colors.grey.shade100,
-        body: _isLoading
-            ? Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  _buildFilters(isArabic),
-                  Expanded(
-                    child: _filteredDetails.isEmpty
-                        ? Center(
-                            child: Text(
-                              isArabic ? "لا توجد معلومات" : "هیچ زانیاری نییە",
-                              style: TextStyle(
-                                  fontFamily: 'NotoKufi', fontSize: 18),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: EdgeInsets.all(12),
-                            itemCount: _filteredDetails.length,
-                            itemBuilder: (context, index) {
-                              return _buildModernDetailCard(
-                                  _filteredDetails[index], isArabic);
-                            },
-                          ),
-                  ),
-                ],
-              ),
-      ),
+  Future<void> _deleteDetail(String id, bool isArabic) async {
+    AppLogger.info('Deleting detail id: $id', tag: 'DETAILS_PAGE');
+    final response = await ApiService.instance.post(
+      AppConstants.deleteDetailsEndpoint,
+      fields: {'id': id},
     );
-  }
-
-  Widget _buildFilters(bool isArabic) {
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: _selectedUserName,
-              decoration: InputDecoration(
-                labelText: isArabic
-                    ? "البحث باسم المستخدم"
-                    : "گەڕان بەناوی بەکارهێنەر",
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: null,
-                  child: Text(
-                    isArabic ? "جميع المستخدمين" : "هەموو بەکارهێنەران",
-                    style: TextStyle(fontFamily: 'NotoKufi'),
-                  ),
-                ),
-                ..._userNames.map((name) => DropdownMenuItem<String>(
-                      value: name,
-                      child:
-                          Text(name, style: TextStyle(fontFamily: 'NotoKufi')),
-                    )),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedUserName = value;
-                  _applyFilters();
-                });
-              },
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: _selectedSubCategory,
-              decoration: InputDecoration(
-                labelText: isArabic
-                    ? "البحث بنوع الفئة الفرعية"
-                    : "گەڕان بە جۆری ژێرپۆل",
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: null,
-                  child: Text(
-                    isArabic ? "جميع الفئات الفرعية" : "هەموو ژێرپۆلەکان",
-                    style: TextStyle(fontFamily: 'NotoKufi'),
-                  ),
-                ),
-                ..._subCategoryNames.map((name) => DropdownMenuItem<String>(
-                      value: name,
-                      child:
-                          Text(name, style: TextStyle(fontFamily: 'NotoKufi')),
-                    )),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedSubCategory = value;
-                  _applyFilters();
-                });
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModernDetailCard(Map<String, dynamic> item, bool isArabic) {
-    bool isActive = item['is_active'] == '1';
-
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      shadowColor: Colors.deepPurple.withOpacity(0.2),
-      child: Column(
-        children: [
-          // Header with User Name, Active Status, Delete, and Update Icons
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.deepPurple,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.person, color: Colors.white, size: 28),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    item['user_name'] ??
-                        (isArabic
-                            ? "لا يوجد اسم مستخدم"
-                            : "ناوی بەکارهێنەر نییە"),
-                    style: TextStyle(
-                      fontFamily: 'NotoKufi',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                Icon(
-                  isActive ? Icons.check_circle : Icons.cancel,
-                  color: isActive ? Colors.greenAccent : Colors.redAccent,
-                  size: 24,
-                ),
-                SizedBox(width: 8),
-                // Update Icon
-                IconButton(
-                  icon: Icon(Icons.edit, color: Colors.white),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            UpdateDetailsPage(detailId: item['id'].toString()),
-                      ),
-                    ).then((_) {
-                      _fetchDetails(); // Reload details after update
-                    });
-                  },
-                ),
-                // Delete Icon
-                IconButton(
-                  icon: Icon(Icons.delete, color: Colors.white),
-                  onPressed: () =>
-                      _confirmDelete(item['id'].toString(), isArabic),
-                ),
-              ],
-            ),
-          ),
-          // Body Content
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDetailRow(
-                    Icons.category,
-                    isArabic ? "نوع الفئة الفرعية" : "جۆری ژێرپۆل",
-                    item['sub_category_name']),
-                _buildDetailRow(
-                    Icons.label, isArabic ? "الاسم" : "ناو", item['name']),
-                _buildDetailRow(
-                    Icons.phone,
-                    isArabic ? "رقم الاتصال" : "ژمارەی پەیوەندی",
-                    item['contact_number']),
-                _buildDetailRow(Icons.location_on, isArabic ? "الموقع" : "شوێن",
-                    item['location']),
-                _buildDetailRow(Icons.description, isArabic ? "الوصف" : "وەسف",
-                    item['description']),
-                if (item['images'] != null &&
-                    (item['images'] as List).isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 10),
-                      Text(
-                        isArabic ? "الصور:" : "وێنەکان:",
-                        style: TextStyle(
-                          fontFamily: 'NotoKufi',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      _buildImageCarousel(item['images']),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    if (!mounted) return;
+    if (response.success) {
+      _snack(
+          S.detailsDeleteSuccess.of(context),
+          success: true);
+      _fetchDetails();
+    } else {
+      _snack(response.error ?? 'Error');
+    }
   }
 
   void _confirmDelete(String id, bool isArabic) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isArabic ? "حذف" : "سڕینەوە",
-            style: TextStyle(fontFamily: 'NotoKufi')),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+        title: Text(S.detailsDeleteTitle.of(ctx),
+            style: const TextStyle(fontFamily: 'NotoKufi')),
         content: Text(
-          isArabic
-              ? "هل أنت متأكد من حذف هذه المعلومات؟"
-              : "دڵنیای کە ئەم زانیاریە بسڕیتەوە؟",
-          style: TextStyle(fontFamily: 'NotoKufi'),
+          S.detailsDeleteContent.of(ctx),
+          style: const TextStyle(fontFamily: 'NotoKufi'),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(isArabic ? "لا" : "نەخێر",
-                style: TextStyle(color: Colors.red, fontFamily: 'NotoKufi')),
-          ),
-          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(S.no.of(ctx),
+                  style: const TextStyle(
+                      fontFamily: 'NotoKufi', color: AppTheme.primary))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              Navigator.of(context).pop();
-              _deleteDetails(id, isArabic);
+              Navigator.pop(ctx);
+              _deleteDetail(id, isArabic);
             },
-            child: Text(isArabic ? "نعم" : "بەڵێ",
-                style: TextStyle(color: Colors.green, fontFamily: 'NotoKufi')),
+            child: Text(S.yes.of(ctx),
+                style: const TextStyle(
+                    fontFamily: 'NotoKufi', color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _deleteDetails(String id, bool isArabic) async {
-    final url = Uri.parse('https://legaryan.heama-soft.com/delete_details.php');
-    try {
-      final response = await http.post(url, body: {'id': id});
-      final responseData = jsonDecode(response.body);
-
-      if (responseData['status'] == 'success') {
-        _showMessage(isArabic
-            ? "تم حذف المعلومات بنجاح"
-            : "زانیاری بە سەرکەوتوویی سڕاوە");
-        _fetchDetails(); // Reload data after deletion
-      } else {
-        _showMessage(isArabic
-            ? "خطأ في الحذف: ${responseData['message']}"
-            : "هەڵە لە سڕینەوە: ${responseData['message']}");
-      }
-    } catch (e) {
-      _showMessage(isArabic ? "حدث خطأ: $e" : "هەڵەیەک ڕوویدا: $e");
-    }
+  void _snack(String msg, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontFamily: 'NotoKufi')),
+      backgroundColor: success ? Colors.green : AppTheme.error,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.deepPurple, size: 20),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              "$label: $value",
-              style: TextStyle(fontFamily: 'NotoKufi', fontSize: 14),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildImageCarousel(List<dynamic> imageUrls) {
-    return SizedBox(
-      height: 120,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: imageUrls.length,
-        itemBuilder: (context, index) {
-          return Container(
-            margin: EdgeInsets.only(left: 8),
-            width: 120,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              image: DecorationImage(
-                image: NetworkImage(
-                    "https://legaryan.heama-soft.com/uploads/${imageUrls[index]}"),
-                fit: BoxFit.cover,
+  @override
+  Widget build(BuildContext context) {
+    final isArabic = context.isArabic;
+    return AppScaffold(
+      titleWidget: _buildSearchField(isArabic),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.accent))
+          : Column(children: [
+              _buildFilters(isArabic),
+              Expanded(
+                child: _filteredDetails.isEmpty
+                    ? Center(
+                        child: Text(
+                            S.detailsEmpty.of(context),
+                            style: const TextStyle(
+                                fontFamily: 'NotoKufi',
+                                fontSize: 16,
+                                color: Colors.grey)))
+                    : RefreshIndicator(
+                        onRefresh: _fetchDetails,
+                        color: AppTheme.accent,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _filteredDetails.length,
+                          itemBuilder: (_, i) =>
+                              _buildDetailCard(_filteredDetails[i], isArabic),
+                        ),
+                      ),
               ),
-            ),
-          );
-        },
+            ]),
+    );
+  }
+
+  Widget _buildSearchField(bool isArabic) {
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: TextField(
+        controller: _searchCtrl,
+        style: const TextStyle(
+            color: Colors.white, fontFamily: 'NotoKufi', fontSize: 14),
+        cursorColor: Colors.white,
+        decoration: InputDecoration(
+          hintText: S.detailsSearchHint.of(context),
+          hintStyle: const TextStyle(
+              color: Colors.white60, fontFamily: 'NotoKufi', fontSize: 13),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          prefixIcon:
+              const Icon(Icons.search_rounded, color: Colors.white70, size: 18),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilters(bool isArabic) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Row(children: [
+        Expanded(
+            child: _dropdown(
+          S.detailsFilterByUser.of(context),
+          [null, ..._userNames],
+          _selectedUser,
+          (v) => setState(() {
+            _selectedUser = v;
+            _applyFilters();
+          }),
+          allLabel: S.detailsAllUsers.of(context),
+        )),
+        const SizedBox(width: 10),
+        Expanded(
+            child: _dropdown(
+          S.detailsFilterByCategory.of(context),
+          [null, ..._subCatNames],
+          _selectedSubCat,
+          (v) => setState(() {
+            _selectedSubCat = v;
+            _applyFilters();
+          }),
+          allLabel: S.detailsAllCategories.of(context),
+        )),
+      ]),
+    );
+  }
+
+  Widget _dropdown(String label, List<String?> items, String? value,
+      ValueChanged<String?> onChange,
+      {String allLabel = 'All'}) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(fontFamily: 'NotoKufi', fontSize: 12),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
+      ),
+      items: items
+          .map((s) => DropdownMenuItem<String>(
+                value: s,
+                child: Text(s ?? allLabel,
+                    style:
+                        const TextStyle(fontFamily: 'NotoKufi', fontSize: 12),
+                    overflow: TextOverflow.ellipsis),
+              ))
+          .toList(),
+      onChanged: onChange,
+    );
+  }
+
+  Widget _buildDetailCard(Map<String, dynamic> item, bool isArabic) {
+    final isActive = item['is_active'] == '1' || item['is_active'] == 1;
+    final images = item['images'] as List? ?? [];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+      elevation: 3,
+      child: Column(children: [
+        // ── Header ──
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: AppTheme.appBarGradient,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(AppTheme.radiusMd),
+              topRight: Radius.circular(AppTheme.radiusMd),
+            ),
+          ),
+          child: Row(children: [
+            const Icon(Icons.person_rounded, color: Colors.white70, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                  item['user_name'] ?? S.detailsNoName.of(context),
+                  style: const TextStyle(
+                      fontFamily: 'NotoKufi',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            Icon(isActive ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                color: isActive ? Colors.greenAccent : Colors.redAccent,
+                size: 20),
+            IconButton(
+              icon:
+                  const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(),
+              onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => UpdateDetailsPage(
+                              detailId: item['id'].toString())))
+                  .then((_) => _fetchDetails()),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded,
+                  color: Colors.white70, size: 18),
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(),
+              onPressed: () => _confirmDelete(item['id'].toString(), isArabic),
+            ),
+          ]),
+        ),
+        // ── Body ──
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _row(
+                Icons.category_rounded,
+                S.detailsSubcategoryType.of(context),
+                item['sub_category_name']),
+            _row(Icons.label_rounded, S.detailsName.of(context), item['name']),
+            _row(
+                Icons.phone_rounded,
+                S.detailsContact.of(context),
+                item['contact_number']),
+            _row(Icons.location_on_rounded, S.detailsLocation.of(context),
+                item['location']),
+            _row(Icons.description_rounded, S.detailsDescription.of(context),
+                item['description']),
+            if (images.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(S.detailsImagesLabel.of(context),
+                  style: const TextStyle(
+                      fontFamily: 'NotoKufi',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 90,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: images.length,
+                  itemBuilder: (_, i) => Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: '${AppConstants.uploadsUrl}${images[i]}',
+                        width: 90,
+                        height: 90,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) =>
+                            Container(color: Colors.grey.shade100),
+                        errorWidget: (_, __, ___) => Container(
+                            color: Colors.grey.shade100,
+                            child: const Icon(Icons.broken_image_rounded,
+                                color: Colors.grey)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _row(IconData icon, String label, dynamic value) {
+    final v = value?.toString() ?? '—';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: AppTheme.primary, size: 16),
+        const SizedBox(width: 8),
+        Text('$label: ',
+            style: const TextStyle(
+                fontFamily: 'NotoKufi',
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54)),
+        Expanded(
+            child: Text(v,
+                style: const TextStyle(fontFamily: 'NotoKufi', fontSize: 13))),
+      ]),
     );
   }
 }

@@ -1,10 +1,12 @@
+// lib/widgets/footer_menu.dart
+
 import 'package:flutter/material.dart';
-import '../screens/dashboard_screen.dart';
+
+import '../core/app_strings.dart';
+import '../core/app_theme.dart';
 import '../screens/AboutUsPage.dart';
-import '../screens/register_screen.dart';
 
 class FooterMenu extends StatelessWidget {
-  // make this optional and default to -1
   final int selectedIndex;
 
   const FooterMenu({
@@ -12,59 +14,108 @@ class FooterMenu extends StatelessWidget {
     this.selectedIndex = -1,
   }) : super(key: key);
 
-  void _onItemTapped(BuildContext context, int index) {
-    if (index == selectedIndex) return;
-
-    final routes = [
-      DashboardScreen(),
-      RegisterScreen(),
-      AboutUsPage(),
-    ];
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => routes[index]),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppTheme.radiusLg)),
+        boxShadow: AppTheme.bottomNavShadow,
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 60,
+          child: Row(children: [
+            _navItem(
+              context: context,
+              index: 0,
+              icon: Icons.home_rounded,
+              label: S.footerHome.of(context),
+              onTap: () =>
+                  Navigator.pushReplacementNamed(context, '/dashboard'),
+            ),
+            _navItem(
+              context: context,
+              index: 1,
+              icon: Icons.person_add_rounded,
+              label: S.footerRegister.of(context),
+              onTap: () => Navigator.pushReplacementNamed(context, '/register'),
+            ),
+            _navItem(
+              context: context,
+              index: 2,
+              icon: Icons.info_rounded,
+              label: S.footerAbout.of(context),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutUsPage()),
+              ),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // locale & labels as before
-    String locale = Localizations.localeOf(context).languageCode;
-    final labels = {
-      'ar': ['الرئيسية', 'التسجيل', 'حول'],
-      'ku': ['پەڕەی سەرەکی', 'خوتومارکرن', 'دەربارە'],
-    };
-    List<String> localizedLabels = labels[locale] ?? labels['ku']!;
+  Widget _navItem({
+    required BuildContext context,
+    required int index,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final bool active = selectedIndex == index;
 
-    const int itemCount = 3;
-    // If selectedIndex is valid, highlight that; otherwise clamp to 0 but
-    // show it in gray so nothing looks “selected.”
-    final bool hasValid = selectedIndex >= 0 && selectedIndex < itemCount;
-    final int current = hasValid ? selectedIndex : 0;
-    final Color selCol = hasValid ? Colors.blueAccent : Colors.grey;
-    final Color unsel = Colors.grey;
-
-    return BottomNavigationBar(
-      currentIndex: current,
-      onTap: (i) => _onItemTapped(context, i),
-      selectedItemColor: selCol,
-      unselectedItemColor: unsel,
-      showUnselectedLabels: true,
-      items: [
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.home),
-          label: localizedLabels[0],
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ── Pill highlight ──────────────────────────────
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: active
+                    ? AppTheme.accent.withOpacity(0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+              ),
+              child: Icon(
+                icon,
+                size: 24,
+                color: active ? AppTheme.accent : Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 2),
+            // ── Label ────────────────────────────────────────
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'NotoKufi',
+                fontSize: 10,
+                fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                color: active ? AppTheme.accent : Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 2),
+            // ── Active dot ───────────────────────────────────
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: active ? 4 : 0,
+              height: active ? 4 : 0,
+              decoration: const BoxDecoration(
+                color: AppTheme.accent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
         ),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.app_registration),
-          label: localizedLabels[1],
-        ),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.info),
-          label: localizedLabels[2],
-        ),
-      ],
+      ),
     );
   }
 }
