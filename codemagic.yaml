@@ -88,12 +88,16 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # Auto-submit to App Store review on every tagged release.
-        submit_to_app_store: true
-        # AFTER_APPROVAL = goes live automatically once Apple approves.
-        # Change to MANUAL if you'd rather click "Release" yourself.
-        release_type: AFTER_APPROVAL
-        cancel_previous_submissions: true
+        # Build + TestFlight only. Submission to App Store review is done
+        # by hand from App Store Connect, so an incomplete listing (missing
+        # screenshots, privacy answers) can't fail the pipeline. Flip to
+        # true once the first release is approved and the listing is stable.
+        submit_to_app_store: false
+        # Only take effect when submit_to_app_store is true — re-enable
+        # them together. AFTER_APPROVAL = goes live automatically once
+        # Apple approves; MANUAL = you click "Release" yourself.
+        # release_type: AFTER_APPROVAL
+        # cancel_previous_submissions: true
       email:
         recipients:
           - heama.soft@gmail.com
