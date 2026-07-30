@@ -1,5 +1,6 @@
 // lib/screens/view_users_screen.dart
 
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -11,6 +12,7 @@ import '../core/app_theme.dart';
 import '../main.dart' show LocaleContext;
 import '../services/api_service.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/load_more_footer.dart';
 import 'user_details_page.dart';
 
 class ViewUsersScreen extends StatefulWidget {
@@ -30,27 +32,35 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
 
   late TabController _tabController;
 
-  int _currentPageApproved = 1, _rowsPerPageApproved = 10, _totalApproved = 0;
-  int _currentPageNotApproved = 1,
-      _rowsPerPageNotApproved = 10,
-      _totalNotApproved = 0;
-  int _currentPageNew = 1, _rowsPerPageNew = 10, _totalNew = 0;
+  /// get_users.php has no server-side paging — it returns every user in
+  /// one response. So instead of slicing the list into pages we render a
+  /// growing window: [_chunkSize] cards at a time, extended whenever the
+  /// user scrolls near the bottom. Cards are built lazily and the heavy
+  /// full-list rebuild that pagination caused is gone.
+  static const int _chunkSize = 20;
+
+  /// Distance (px) from the bottom that triggers the next chunk.
+  static const double _loadMoreThreshold = 400;
+
+  int _visibleApproved = _chunkSize, _totalApproved = 0;
+  int _visibleNotApproved = _chunkSize, _totalNotApproved = 0;
+  int _visibleNew = _chunkSize, _totalNew = 0;
+
+  /// Search debounce — the endpoint returns ~300 records, so firing a
+  /// request on every keystroke made typing feel sluggish.
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
     AppLogger.info('ViewUsersScreen init', tag: 'VIEW_USERS');
     _tabController = TabController(length: 3, vsync: this);
-    // Rebuild pagination footer when active tab changes (it tracks
-    // the focused tab to know which page/perPage state to mutate).
-    _tabController.addListener(() {
-      if (mounted) setState(() {});
-    });
     _fetchUsers();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -87,6 +97,10 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
           _totalApproved = _approvedUsers.length;
           _totalNotApproved = _notApprovedUsers.length;
           _totalNew = _newUsers.length;
+          // Fresh data → shrink each window back to the first chunk.
+          _visibleApproved = _chunkSize;
+          _visibleNotApproved = _chunkSize;
+          _visibleNew = _chunkSize;
           _isLoading = false;
         });
       } else {
@@ -164,15 +178,6 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
     ));
   }
 
-  // ── Pagination helpers ───────────────────────────────────────
-
-  List<dynamic> _page(List<dynamic> list, int page, int perPage) {
-    final start = (page - 1) * perPage;
-    if (start >= list.length) return [];
-    final end = (start + perPage).clamp(0, list.length);
-    return list.sublist(start, end);
-  }
-
   // ── BUILD ────────────────────────────────────────────────────
 
   @override
@@ -185,33 +190,32 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.accent))
-          : Column(children: [
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildList(
-                      _page(_approvedUsers, _currentPageApproved,
-                          _rowsPerPageApproved),
-                      S.viewUsersEmptyApproved.of(context),
-                      isArabic,
-                    ),
-                    _buildList(
-                      _page(_notApprovedUsers, _currentPageNotApproved,
-                          _rowsPerPageNotApproved),
-                      S.viewUsersEmptyNotApproved.of(context),
-                      isArabic,
-                    ),
-                    _buildList(
-                      _page(_newUsers, _currentPageNew, _rowsPerPageNew),
-                      S.viewUsersEmptyNew.of(context),
-                      isArabic,
-                    ),
-                  ],
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildList(
+                  _approvedUsers,
+                  _visibleApproved,
+                  (v) => _visibleApproved = v,
+                  S.viewUsersEmptyApproved.of(context),
+                  isArabic,
                 ),
-              ),
-              _buildPagination(context),
-            ]),
+                _buildList(
+                  _notApprovedUsers,
+                  _visibleNotApproved,
+                  (v) => _visibleNotApproved = v,
+                  S.viewUsersEmptyNotApproved.of(context),
+                  isArabic,
+                ),
+                _buildList(
+                  _newUsers,
+                  _visibleNew,
+                  (v) => _visibleNew = v,
+                  S.viewUsersEmptyNew.of(context),
+                  isArabic,
+                ),
+              ],
+            ),
     );
   }
 
@@ -244,12 +248,10 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
               color: Colors.white70, size: 18),
         ),
         onChanged: (v) {
-          setState(() {
-            _searchQuery = v;
-            _currentPageApproved =
-                _currentPageNotApproved = _currentPageNew = 1;
-          });
-          _fetchUsers();
+          _searchQuery = v;
+          _searchDebounce?.cancel();
+          _searchDebounce =
+              Timer(const Duration(milliseconds: 400), _fetchUsers);
         },
       ),
     );
@@ -287,7 +289,16 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
 
   // ── List + empty state ──────────────────────────────────────
 
-  Widget _buildList(List<dynamic> users, String empty, bool isArabic) {
+  /// [users] is the FULL tab list; only the first [visible] entries are
+  /// rendered. Scrolling near the bottom calls [setVisible] with a larger
+  /// window, which grows the list in place — no page buttons, no refetch.
+  Widget _buildList(
+    List<dynamic> users,
+    int visible,
+    void Function(int) setVisible,
+    String empty,
+    bool isArabic,
+  ) {
     if (users.isEmpty) {
       return Center(
         child: Padding(
@@ -316,14 +327,38 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
         ),
       );
     }
+    final shown = visible.clamp(0, users.length);
+    final hasMore = shown < users.length;
+
     return RefreshIndicator(
       onRefresh: _fetchUsers,
       color: AppTheme.accent,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        itemCount: users.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _buildUserCard(users[i], isArabic),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (hasMore &&
+              n.metrics.axis == Axis.vertical &&
+              n.metrics.pixels >=
+                  n.metrics.maxScrollExtent - _loadMoreThreshold) {
+            setState(() => setVisible(
+                (shown + _chunkSize).clamp(0, users.length)));
+          }
+          return false;
+        },
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          // +1 for the trailing loader / end-of-list line.
+          itemCount: shown + 1,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) => i == shown
+              ? LoadMoreFooter(
+                  // The rows are already in memory, so the spinner would
+                  // flash for a single frame — show the growth silently.
+                  isLoading: false,
+                  hasMore: hasMore,
+                  showEndMessage: users.length > _chunkSize,
+                )
+              : _buildUserCard(users[i], isArabic),
+        ),
       ),
     );
   }
@@ -536,255 +571,6 @@ class _ViewUsersScreenState extends State<ViewUsersScreen>
           ),
         ),
       ],
-    );
-  }
-
-  // ── Pagination footer (per-tab state) ───────────────────────
-
-  Widget _buildPagination(BuildContext context) {
-    final tabIdx = _tabController.index;
-    int page, perPage, total;
-    switch (tabIdx) {
-      case 0:
-        page = _currentPageApproved;
-        perPage = _rowsPerPageApproved;
-        total = _totalApproved;
-        break;
-      case 1:
-        page = _currentPageNotApproved;
-        perPage = _rowsPerPageNotApproved;
-        total = _totalNotApproved;
-        break;
-      default:
-        page = _currentPageNew;
-        perPage = _rowsPerPageNew;
-        total = _totalNew;
-    }
-    final totalPages = ((total / perPage).ceil()).clamp(1, 9999);
-    final canPrev = page > 1;
-    final canNext = page < totalPages;
-
-    void setPage(int p) => setState(() {
-          switch (tabIdx) {
-            case 0:
-              _currentPageApproved = p;
-              break;
-            case 1:
-              _currentPageNotApproved = p;
-              break;
-            default:
-              _currentPageNew = p;
-          }
-        });
-
-    void setPerPage(int p) => setState(() {
-          switch (tabIdx) {
-            case 0:
-              _rowsPerPageApproved = p;
-              _currentPageApproved = 1;
-              break;
-            case 1:
-              _rowsPerPageNotApproved = p;
-              _currentPageNotApproved = 1;
-              break;
-            default:
-              _rowsPerPageNew = p;
-              _currentPageNew = 1;
-          }
-        });
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        boxShadow: AppTheme.bottomNavShadow,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _rowsPerPagePill(context, perPage, setPerPage),
-              _pageNavigator(context, page, totalPages, total, canPrev, canNext,
-                  setPage),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _rowsPerPagePill(
-    BuildContext context,
-    int perPage,
-    void Function(int) setPerPage,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(color: AppTheme.divider, width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              S.workListShowLabel.of(context),
-              style: const TextStyle(
-                fontFamily: 'NotoKufi',
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppTheme.primary,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: perPage,
-                isDense: true,
-                iconSize: 16,
-                icon: const Padding(
-                  padding: EdgeInsets.only(right: 2),
-                  child: Icon(Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white),
-                ),
-                dropdownColor: AppTheme.surface,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                style: const TextStyle(
-                  fontFamily: 'NotoKufi',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-                selectedItemBuilder: (_) => [10, 20, 50]
-                    .map((r) => Center(
-                          child: Text(
-                            '$r',
-                            style: const TextStyle(
-                              fontFamily: 'NotoKufi',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-                items: [10, 20, 50]
-                    .map((r) => DropdownMenuItem(
-                          value: r,
-                          child: Text('$r',
-                              style: const TextStyle(
-                                fontFamily: 'NotoKufi',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              )),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setPerPage(v);
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pageNavigator(
-    BuildContext context,
-    int page,
-    int totalPages,
-    int total,
-    bool canPrev,
-    bool canNext,
-    void Function(int) setPage,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(color: AppTheme.divider, width: 1),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // chevron_right visually points → ("back/previous" in RTL).
-          _navIconButton(
-            icon: Icons.chevron_right_rounded,
-            enabled: canPrev,
-            onTap: () => setPage(page - 1),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$page / $totalPages',
-                  style: const TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                    height: 1.1,
-                  ),
-                ),
-                Text(
-                  '$total ${S.workListResultsSuffix.of(context)}',
-                  style: const TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 9,
-                    color: AppTheme.textMuted,
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _navIconButton(
-            icon: Icons.chevron_left_rounded,
-            enabled: canNext,
-            onTap: () => setPage(page + 1),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navIconButton({
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: enabled ? AppTheme.primary : AppTheme.divider.withOpacity(0.5),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: enabled ? onTap : null,
-        child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(
-            icon,
-            size: 20,
-            color: enabled ? Colors.white : AppTheme.textMuted,
-          ),
-        ),
-      ),
     );
   }
 }

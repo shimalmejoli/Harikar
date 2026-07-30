@@ -12,6 +12,7 @@ import '../core/app_theme.dart';
 import '../main.dart';
 import '../services/api_service.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/load_more_footer.dart';
 import 'WorkDetailsScreen.dart';
 
 class WorkDetailsPage extends StatefulWidget {
@@ -23,14 +24,28 @@ class WorkDetailsPage extends StatefulWidget {
 }
 
 class _WorkDetailsPageState extends State<WorkDetailsPage> {
+  /// Rows requested per network page. 50 is the hard cap enforced by
+  /// `fetch_full_details.php` — asking for more still returns 50, so
+  /// this is the largest useful chunk per round-trip.
+  static const int _pageSize = 50;
+
+  /// Distance (px) from the bottom of the list at which the next page
+  /// starts loading, so rows are ready before the user gets there.
+  static const double _loadMoreThreshold = 600;
+
   List<Map<String, dynamic>> _subcategories = [];
-  List<Map<String, dynamic>> _allWorkUsers = [];
-  List<Map<String, dynamic>> _filteredWorkUsers = [];
+  List<Map<String, dynamic>> _workUsers = [];
   Map<String, String> _subcategoryMap = {};
 
-  int _currentPage = 1;
-  int _rowsPerPage = 10;
-  int _totalPages = 1;
+  /// Guards against the same record appearing twice if the backend
+  /// re-orders rows between two page requests.
+  final Set<String> _loadedIds = {};
+
+  final ScrollController _scrollController = ScrollController();
+
+  int _nextPage = 1;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
 
   String? _selectedSubcategoryId;
   String? _selectedCity;
@@ -68,6 +83,19 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final lang = context.langCode;
@@ -81,6 +109,14 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
         _fetchWorkUsers(
             subcategoryId: widget.subcategoryId, city: _selectedCity);
       });
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - _loadMoreThreshold) {
+      _loadMore();
     }
   }
 
@@ -121,77 +157,101 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
     });
   }
 
-  // ── Fetch work users ─────────────────────────────────────
+  // ── Fetch work users (infinite scroll) ───────────────────
+  //
+  // The section/city filters are applied by the backend (both are
+  // query params of fetch_full_details.php), so every page request
+  // already returns only matching rows — no client-side re-filtering
+  // is needed and paging stays correct while a filter is active.
 
+  /// (Re)loads the list from page 1. Called on first build, on filter
+  /// change and on pull-to-refresh.
   Future<void> _fetchWorkUsers({String? subcategoryId, String? city}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _workUsers = [];
+      _loadedIds.clear();
+      _nextPage = 1;
+      _hasMore = true;
+      _isLoadingMore = false;
     });
-    AppLogger.info('Fetching work users — subcat: $subcategoryId city: $city',
+
+    await _loadPage(subcategoryId: subcategoryId, city: city);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    // Jump back to the top so a filter change doesn't leave the user
+    // scrolled into the middle of a brand-new, shorter list.
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
+  /// Appends the next page when the user scrolls near the bottom.
+  Future<void> _loadMore() async {
+    if (_isLoading || _isLoadingMore || !_hasMore) return;
+    setState(() => _isLoadingMore = true);
+
+    await _loadPage(
+        subcategoryId: _selectedSubcategoryId, city: _selectedCity);
+
+    if (!mounted) return;
+    setState(() => _isLoadingMore = false);
+  }
+
+  /// Single network page → appended to [_workUsers].
+  Future<void> _loadPage({String? subcategoryId, String? city}) async {
+    final page = _nextPage;
+    AppLogger.info(
+        'Fetching work users — page: $page subcat: $subcategoryId city: $city',
         tag: 'WORK_PAGE');
 
     final r = await ApiService.instance.fetchWorkDetails(
       subcategoryId: subcategoryId,
       city: city,
       lang: context.langCode,
+      page: page,
+      limit: _pageSize,
     );
     if (!mounted) return;
 
     if (r.success && r.data != null) {
       final list =
           (r.data!['data'] as List? ?? []).cast<Map<String, dynamic>>();
-      AppLogger.info('Work users loaded: ${list.length}', tag: 'WORK_PAGE');
+      final fresh = list
+          .where((u) => _loadedIds.add(u['id']?.toString() ?? ''))
+          .toList();
+      AppLogger.info(
+          'Work users page $page: ${list.length} rows (${fresh.length} new)',
+          tag: 'WORK_PAGE');
+
       setState(() {
-        _allWorkUsers = list;
-        _applyFilters();
+        _workUsers.addAll(fresh);
+        _nextPage = page + 1;
+        // A short page means the server has nothing left; an all-duplicate
+        // page means it is looping, so stop either way.
+        _hasMore = list.length >= _pageSize && fresh.isNotEmpty;
+        _errorMessage = null;
       });
-      // Prefetch images in background
-      for (final u in list) {
+
+      // Warm the image cache for the rows just added, so they are
+      // already decoded by the time they scroll into view.
+      for (final u in fresh) {
         final img = u['photo_url'] as String?;
         if (img != null && img.isNotEmpty) {
           CachedNetworkImageProvider(img).resolve(const ImageConfiguration());
         }
       }
     } else {
-      AppLogger.error('Work users failed: ${r.error}', tag: 'WORK_PAGE');
+      AppLogger.error('Work users page $page failed: ${r.error}',
+          tag: 'WORK_PAGE');
       setState(() {
-        _allWorkUsers = [];
-        _filteredWorkUsers = [];
-        _totalPages = 1;
-        _currentPage = 1;
-        _errorMessage = r.error;
+        _hasMore = false;
+        // Only surface a full-screen error when nothing is on screen yet —
+        // a failed "load more" must not wipe the rows already shown.
+        if (_workUsers.isEmpty) _errorMessage = r.error;
       });
     }
-    setState(() => _isLoading = false);
-  }
-
-  // ── Filter + paginate ────────────────────────────────────
-
-  void _applyFilters() {
-    _filteredWorkUsers = _allWorkUsers.where((u) {
-      bool ok = true;
-      if (_selectedSubcategoryId?.isNotEmpty == true) {
-        ok = ok && u['sub_category_id']?.toString() == _selectedSubcategoryId;
-      }
-      if (_selectedCity?.isNotEmpty == true &&
-          _selectedCity != 'هەموو شەهرەکان') {
-        ok = ok && u['location']?.toString() == _selectedCity;
-      }
-      return ok;
-    }).toList();
-
-    _totalPages =
-        ((_filteredWorkUsers.length / _rowsPerPage).ceil()).clamp(1, 999999);
-    if (_currentPage > _totalPages) _currentPage = _totalPages;
-    setState(() {});
-  }
-
-  List<Map<String, dynamic>> get _currentPage_ {
-    final start = (_currentPage - 1) * _rowsPerPage;
-    if (start >= _filteredWorkUsers.length) return [];
-    final end = (start + _rowsPerPage).clamp(0, _filteredWorkUsers.length);
-    return _filteredWorkUsers.sublist(start, end);
   }
 
   // ── Actions ──────────────────────────────────────────────
@@ -203,8 +263,22 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
           context,
           MaterialPageRoute(
               builder: (_) => WorkDetailsScreen(detailId: id!, user: user)));
-      _refreshPage();
+      // Refresh only THIS record's view count. Reloading the whole list
+      // here would throw away every page the user has scrolled through.
+      await _syncViewCount(user, id!);
     }
+  }
+
+  /// Pulls the fresh view count for a single record (it may have been
+  /// incremented on the details screen) and patches the card in place.
+  Future<void> _syncViewCount(Map<String, dynamic> user, String id) async {
+    final r = await ApiService.instance.fetchDetailById(id);
+    if (!mounted || !r.success || r.data == null) return;
+    final list = (r.data!['data'] as List? ?? []);
+    if (list.isEmpty) return;
+    final views = (list.first as Map)['view_count'];
+    if (views == null) return;
+    setState(() => user['view_count'] = views);
   }
 
   Future<void> _onWhatsApp(Map<String, dynamic> user) async {
@@ -237,14 +311,8 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  void _refreshPage() {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    _fetchWorkUsers(subcategoryId: _selectedSubcategoryId, city: _selectedCity)
-        .then((_) => setState(() => _isLoading = false));
-  }
+  Future<void> _refreshPage() =>
+      _fetchWorkUsers(subcategoryId: _selectedSubcategoryId, city: _selectedCity);
 
   // ── BUILD ────────────────────────────────────────────────
 
@@ -258,10 +326,29 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
         Container(
           color: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(children: [
-            Expanded(child: _subcategoryDropdown(isArabic)),
-            const SizedBox(width: 10),
-            Expanded(child: _cityDropdown(isArabic)),
+          child: Column(children: [
+            Row(children: [
+              Expanded(child: _subcategoryDropdown(isArabic)),
+              const SizedBox(width: 10),
+              Expanded(child: _cityDropdown(isArabic)),
+            ]),
+            // Loaded-rows counter — replaces the old "page X / Y" footer.
+            if (!_isLoading && _errorMessage == null && _workUsers.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Text(
+                    '${_workUsers.length}${_hasMore ? '+' : ''} '
+                    '${S.workListResultsSuffix.of(context)}',
+                    style: const TextStyle(
+                      fontFamily: 'NotoKufi',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                ]),
+              ),
           ]),
         ),
         // ── List ──
@@ -293,7 +380,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
                                     color: Colors.white)),
                           ),
                         ]))
-                  : _currentPage_.isEmpty
+                  : _workUsers.isEmpty
                       ? Center(
                           child: Text(
                           S.workListEmpty.of(context),
@@ -303,18 +390,24 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
                               color: Colors.grey.shade400),
                         ))
                       : RefreshIndicator(
-                          onRefresh: () async => _refreshPage(),
+                          onRefresh: _refreshPage,
                           color: AppTheme.accent,
                           child: ListView.builder(
+                            controller: _scrollController,
                             padding: const EdgeInsets.symmetric(vertical: 8),
-                            itemCount: _currentPage_.length,
-                            itemBuilder: (_, i) =>
-                                _buildCard(_currentPage_[i], isArabic),
+                            // +1 for the trailing loader / end-of-list line.
+                            itemCount: _workUsers.length + 1,
+                            itemBuilder: (_, i) => i == _workUsers.length
+                                ? LoadMoreFooter(
+                                    isLoading: _isLoadingMore,
+                                    hasMore: _hasMore,
+                                    showEndMessage:
+                                        _workUsers.length > _pageSize,
+                                  )
+                                : _buildCard(_workUsers[i], isArabic),
                           ),
                         ),
         ),
-        // ── Pagination footer ──
-        _buildFooter(isArabic),
       ]),
     );
   }
@@ -349,10 +442,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
             )),
       ],
       onChanged: (v) {
-        setState(() {
-          _selectedSubcategoryId = v;
-          _currentPage = 1;
-        });
+        setState(() => _selectedSubcategoryId = v);
         _fetchWorkUsers(subcategoryId: v, city: _selectedCity);
       },
     );
@@ -383,10 +473,7 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
             )),
       ],
       onChanged: (v) {
-        setState(() {
-          _selectedCity = v;
-          _currentPage = 1;
-        });
+        setState(() => _selectedCity = v);
         _fetchWorkUsers(subcategoryId: _selectedSubcategoryId, city: v);
       },
     );
@@ -553,211 +640,6 @@ class _WorkDetailsPageState extends State<WorkDetailsPage> {
             ),
           ),
         ]),
-      ),
-    );
-  }
-
-  // ── Pagination footer ────────────────────────────────────
-
-  // ── Pagination footer (modern design) ────────────────────
-  // Layout (RTL):
-  //   ┌──────────────────────────────────────────────┐
-  //   │  [10 ▼]               ◄  1 / 5  ►   50 ⋅ کۆ │
-  //   └──────────────────────────────────────────────┘
-  // Rows-per-page on one side, page navigator + total count on
-  // the other. Bottom safe area is respected so the bar sits
-  // above the system gesture/nav bar on mobile.
-  Widget _buildFooter(bool isArabic) {
-    final canPrev = _currentPage > 1;
-    final canNext = _currentPage < _totalPages;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        boxShadow: AppTheme.bottomNavShadow,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildRowsPerPagePill(isArabic),
-              _buildPageNavigator(canPrev, canNext, isArabic),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRowsPerPagePill(bool isArabic) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(color: AppTheme.divider, width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              S.workListShowLabel.of(context),
-              style: const TextStyle(
-                fontFamily: 'NotoKufi',
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppTheme.primary,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: _rowsPerPage,
-                isDense: true,
-                iconSize: 16,
-                icon: const Padding(
-                  padding: EdgeInsets.only(right: 2),
-                  child: Icon(Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white),
-                ),
-                dropdownColor: AppTheme.surface,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                style: const TextStyle(
-                  fontFamily: 'NotoKufi',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-                selectedItemBuilder: (_) => [10, 20, 50]
-                    .map((r) => Center(
-                          child: Text(
-                            '$r',
-                            style: const TextStyle(
-                              fontFamily: 'NotoKufi',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-                items: [10, 20, 50]
-                    .map((r) => DropdownMenuItem(
-                          value: r,
-                          child: Text(
-                            '$r',
-                            style: const TextStyle(
-                              fontFamily: 'NotoKufi',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      _rowsPerPage = v;
-                      _currentPage = 1;
-                    });
-                    _applyFilters();
-                  }
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPageNavigator(bool canPrev, bool canNext, bool isArabic) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(color: AppTheme.divider, width: 1),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // chevron_right visually points → which is "back/previous"
-          // in RTL (toward the start of the reading flow).
-          _navIconButton(
-            icon: Icons.chevron_right_rounded,
-            enabled: canPrev,
-            onTap: () => setState(() => _currentPage--),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$_currentPage / $_totalPages',
-                  style: const TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                    height: 1.1,
-                  ),
-                ),
-                Text(
-                  '${_filteredWorkUsers.length} ${S.workListResultsSuffix.of(context)}',
-                  style: const TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 9,
-                    color: AppTheme.textMuted,
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _navIconButton(
-            icon: Icons.chevron_left_rounded,
-            enabled: canNext,
-            onTap: () => setState(() => _currentPage++),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navIconButton({
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: enabled ? AppTheme.primary : AppTheme.divider.withOpacity(0.5),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: enabled ? onTap : null,
-        child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(
-            icon,
-            size: 20,
-            color: enabled ? Colors.white : AppTheme.textMuted,
-          ),
-        ),
       ),
     );
   }

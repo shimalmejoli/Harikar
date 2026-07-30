@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:upgrader/upgrader.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_constants.dart';
@@ -20,7 +19,9 @@ import '../core/app_theme.dart';
 import '../main.dart' show LocaleContext;
 import '../services/api_service.dart';
 import '../services/cache_service.dart';
+import '../services/update_service.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/update_dialog.dart';
 import 'AboutUsPage.dart';
 import 'WorkDetailsScreen.dart';
 import 'form_search_work.dart';
@@ -73,7 +74,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _startSlideshowTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_didFetchData) _loadData();
+      _maybePromptForUpdate();
     });
+  }
+
+  // ── App update prompt ──────────────────────────────────────
+
+  /// Asks the store whether a newer build is published and, if so,
+  /// shows the update dialog. The dashboard is the first screen after
+  /// the splash, so this runs once per app launch; the user can dismiss
+  /// it and will be asked again on the next launch (nothing is stored).
+  Future<void> _maybePromptForUpdate() async {
+    final service = UpdateService.instance;
+    // Re-entering the dashboard (back navigation, tab switch) must not
+    // re-open the dialog within the same run.
+    if (service.promptedThisLaunch) return;
+
+    final update = await service.checkForUpdate();
+    if (!mounted || update == null) return;
+
+    service.markPrompted();
+    await showUpdateDialog(context, update);
   }
 
   @override
@@ -403,18 +424,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isHomePage: true,
       extendBodyBehindAppBar: true,
       bottomNavigationBar: _buildBottomNav(isArabic),
-      body: UpgradeAlert(
-        upgrader: Upgrader(
-          messages: _UpgraderMessages(context),
-          durationUntilAlertAgain: const Duration(hours: 24),
-          minAppVersion: null,
-          debugLogging: false,
-        ),
-        dialogStyle: UpgradeDialogStyle.material,
-        showIgnore: false,
-        showLater: true,
-        showReleaseNotes: false,
-        child: _isLoading && _categories.isEmpty
+      body: _isLoading && _categories.isEmpty
           ? _buildLoadingState(isArabic)
           : RefreshIndicator(
               onRefresh: _fetchAllData,
@@ -461,7 +471,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-      ),
     );
   }
 
@@ -942,36 +951,5 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Bilingual messages for the upgrader update dialog.
-// Maps the upgrader package's message keys to our S strings,
-// honoring the user's current language (Arabic / Kurdish).
-// ─────────────────────────────────────────────────────────────
-
-class _UpgraderMessages extends UpgraderMessages {
-  final BuildContext _ctx;
-  _UpgraderMessages(this._ctx);
-
-  @override
-  String? message(UpgraderMessage messageKey) {
-    switch (messageKey) {
-      case UpgraderMessage.title:
-        return S.updateAvailableTitle.of(_ctx);
-      case UpgraderMessage.body:
-        return S.updateAvailableMessage.of(_ctx);
-      case UpgraderMessage.prompt:
-        return S.updatePrompt.of(_ctx);
-      case UpgraderMessage.buttonTitleUpdate:
-        return S.updateButtonNow.of(_ctx);
-      case UpgraderMessage.buttonTitleLater:
-        return S.updateButtonLater.of(_ctx);
-      case UpgraderMessage.buttonTitleIgnore:
-        return S.updateButtonIgnore.of(_ctx);
-      case UpgraderMessage.releaseNotes:
-        return S.updateReleaseNotes.of(_ctx);
-    }
   }
 }

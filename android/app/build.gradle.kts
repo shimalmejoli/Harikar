@@ -17,7 +17,11 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.legaryan_kare.app"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned to Android 16 (API 36) instead of flutter.compileSdkVersion,
+    // which is still 35 on Flutter 3.32.5. Google Play requires apps to
+    // target API 36+ to publish updates after Aug 31, 2026.
+    // Requires SDK Platform 36 + build-tools 36.0.0 to be installed.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -35,7 +39,9 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // Play policy: must be within 1 year of the latest Android release.
+        // Keep this in sync with compileSdk above when bumping.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

@@ -62,6 +62,12 @@ class S {
       'مرحبا، لقد وجدتك في تطبيق هاريكار. أود التواصل معك.',
       'سلاڤ، من دڤێت پەیوەندی تە بکەم. من پێزانین تە دیتینە رێکا پرۆگرامێ هاریکار.');
 
+  // ── Infinite-scroll lists (shared) ───────────────────────
+  static const listLoadingMore =
+      TString('جاري تحميل المزيد...', 'جارى باركرنا زێدەتر...');
+  static const listAllLoaded =
+      TString('تم عرض جميع النتائج', 'هەمی ئەنجام هاتنە پیشاندان');
+
   // ── Footer menu ─────────────────────────────────────────
   static const footerHome = TString('الرئيسية', 'پەڕا سەرەکی');
   static const footerRegister = TString('التسجيل', 'خۆتۆمارکرن');
@@ -395,7 +401,7 @@ class S {
       'انتهت صلاحية الجلسة. يرجى البدء من جديد.',
       'کاتی جلسەکە تەواو بوو. تکایە لە سەرەتاوە دەست پێبکەرەوە.');
 
-  // ── App update prompt (upgrader package) ─────────────────
+  // ── App update prompt (UpdateService + showUpdateDialog) ──
   static const updateAvailableTitle =
       TString('تحديث متاح', 'نوێکردنەوە بەردەستە');
   static const updateAvailableMessage = TString(
@@ -405,9 +411,6 @@ class S {
       'هل ترغب في التحديث الآن؟', 'دەتەوێت ئێستا نوێی بکەیتەوە؟');
   static const updateButtonNow = TString('تحديث الآن', 'ئێستا نوێی بکەرەوە');
   static const updateButtonLater = TString('لاحقاً', 'دواتر');
-  static const updateButtonIgnore = TString('تجاهل', 'پشتگوێ خستن');
-  static const updateReleaseNotes =
-      TString('ما الجديد:', 'چی نوێ هەیە:');
 
   // ── ViewUsersScreen ──────────────────────────────────────
   static const viewUsersDeletedSnack =
@@ -536,7 +539,7 @@ class S {
   static const workListAllCities = TString('جميع المدن', 'هەموو شارەکان');
   static const workListEmpty =
       TString('لم يتم العثور على معلومات', 'چ تشت بەر دەست نینن نوکە');
-  static const workListShowLabel = TString('عرض', 'پیشاندان');
+  // Suffix for the loaded-rows counter above the list ("120+ ئەنجام").
   static const workListResultsSuffix = TString('نتيجة', 'ئەنجام');
 
   // ── FormSearchWork ───────────────────────────────────────

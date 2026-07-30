@@ -128,9 +128,33 @@ class AppConstants {
   static const String updateAdsStatusEndpoint =
       '$baseUrl/update_ads_status.php';
 
+  // ── Store listings (in-app update check) ────────────────────
+  // Must match android/app/build.gradle's `applicationId` and the iOS
+  // `PRODUCT_BUNDLE_IDENTIFIER` — the update check looks the app up by
+  // these ids, so a rename here silently disables the prompt.
+  static const String androidPackageId = 'com.legaryan_kare.app';
+  static const String appStoreBundleId = 'com.heamasoft.harikar';
+
+  static const String playStoreUrl =
+      'https://play.google.com/store/apps/details?id=$androidPackageId';
+
+  /// Opens the Play Store app directly instead of a browser.
+  static const String playStoreNativeUrl =
+      'market://details?id=$androidPackageId';
+
+  static const String appStoreLookupUrl = 'https://itunes.apple.com/lookup';
+
+  /// Storefronts to query, in order. An app published only in Iraq is
+  /// invisible from the default US storefront, hence the explicit list.
+  static const List<String> appStoreCountries = ['iq', 'us'];
+
   // ── Network timeouts ────────────────────────────────────────
   static const Duration connectTimeout = Duration(seconds: 12);
   static const Duration receiveTimeout = Duration(seconds: 15);
+
+  /// Update lookups run at startup, so they stay short — a slow store
+  /// response must never delay or block the first screen.
+  static const Duration updateCheckTimeout = Duration(seconds: 8);
 
   // ── Pagination ──────────────────────────────────────────────
   static const int defaultPageSize = 10;

@@ -11,15 +11,15 @@ workflows:
       app_store_connect: Harikar
 
     environment:
-      flutter: stable
-      xcode: latest
+      # Pinned to match local dev — font_awesome_flutter 10.9.1 doesn't
+      # build on Flutter 3.44+ (IconData became final). Do NOT use 'stable'.
+      flutter: 3.32.5
+      # Pinned too: 'latest' rolls onto Xcode versions newer than this
+      # Flutter release supports, which fails at the Runner build phase.
+      xcode: 16.4
       cocoapods: default
       vars:
         BUNDLE_ID: "com.heamasoft.harikar"
-        # App Store Connect → your app → App Information → "Apple ID"
-        # (a numeric value like 1234567890). Used to read the latest
-        # iOS build number so we never collide.
-        APP_STORE_APPLE_ID: "INSERT_YOUR_NUMERIC_APPLE_APP_ID"
 
     # Push a version tag (e.g. `git tag v1.0.5 && git push origin v1.0.5`)
     # to trigger a release build automatically.
@@ -34,15 +34,28 @@ workflows:
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # Decouple iOS build number from the Android versionCode in pubspec.
-      # Read the highest build number already on App Store Connect and add 1.
+      # Decouple the iOS build number from the Android versionCode in
+      # pubspec. The numeric App Store app id is resolved from BUNDLE_ID
+      # at build time, so there is no id to paste in by hand — and the
+      # very first release (no app record / no builds yet) starts at 1.
       - name: Set iOS build number from App Store Connect
         script: |
           set -e
-          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "0")
-          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then LATEST=0; fi
-          NEW_BUILD=$((LATEST + 1))
-          echo "Latest App Store build: $LATEST → using $NEW_BUILD"
+          APP_ID=$(app-store-connect apps list \
+                     --bundle-id-identifier "$BUNDLE_ID" \
+                     --json 2>/dev/null | jq -r '.[0].id // empty' || true)
+
+          if [ -z "$APP_ID" ]; then
+            echo "No App Store Connect record for $BUNDLE_ID yet — starting at build 1"
+            NEW_BUILD=1
+          else
+            LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_ID" 2>/dev/null || echo "0")
+            case "$LATEST" in
+              ''|*[!0-9]*) LATEST=0 ;;
+            esac
+            NEW_BUILD=$((LATEST + 1))
+            echo "App id $APP_ID — latest App Store build: $LATEST → using $NEW_BUILD"
+          fi
           echo "IOS_BUILD_NUMBER=$NEW_BUILD" >> "$CM_ENV"
 
       - name: Regenerate iOS project and Pods

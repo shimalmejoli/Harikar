@@ -227,12 +227,17 @@ class ApiService {
   Future<ApiResponse<Map<String, dynamic>>> fetchSubcategories() =>
       get(AppConstants.subcategoriesEndpoint, queryParams: _cacheBust());
 
+  /// One page of work records. `fetch_full_details.php` applies the
+  /// `sub_category_id` / `city` filters server-side and caps `limit` at
+  /// [AppConstants.maxPageSize] (50) — asking for more still returns 50.
+  /// Callers page through by incrementing [page] until a response comes
+  /// back with fewer than [limit] rows (see WorkDetailsPage).
   Future<ApiResponse<Map<String, dynamic>>> fetchWorkDetails({
     String? subcategoryId,
     String? city,
     String lang = 'ku',
     int page = 1,
-    int limit = AppConstants.defaultPageSize,
+    int limit = AppConstants.maxPageSize,
   }) {
     final params = <String, String>{
       'page': page.toString(),
