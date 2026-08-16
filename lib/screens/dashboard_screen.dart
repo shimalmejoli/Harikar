@@ -22,7 +22,6 @@ import '../services/cache_service.dart';
 import '../services/update_service.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/update_dialog.dart';
-import 'AboutUsPage.dart';
 import 'WorkDetailsScreen.dart';
 import 'form_search_work.dart';
 import 'work_details_page.dart';
@@ -46,7 +45,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   bool _didFetchData = false;
   int _currentSlide = 1;
-  int _selectedIndex = 0;
   // Tracks the user's selected language code so we can re-translate
   // category names when they switch via the drawer. We watch
   // LocaleProvider.langCode (not Localizations.localeOf) because the
@@ -423,7 +421,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: S.dashboardTitle.of(context),
       isHomePage: true,
       extendBodyBehindAppBar: true,
-      bottomNavigationBar: _buildBottomNav(isArabic),
+      // Shared footer from AppScaffold, with "home" highlighted.
+      footerIndex: 0,
       body: _isLoading && _categories.isEmpty
           ? _buildLoadingState(isArabic)
           : RefreshIndicator(
@@ -870,86 +869,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Bottom Nav ─────────────────────────────────────────────
-
-  Widget _buildBottomNav(bool isArabic) {
-    return Container(
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppTheme.radiusLg)),
-          boxShadow: AppTheme.bottomNavShadow),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 60,
-          child: Row(children: [
-            _navItem(0, Icons.home_rounded,
-                S.footerHome.of(context), isArabic),
-            _navItem(1, Icons.person_add_rounded,
-                S.footerRegister.of(context), isArabic),
-            _navItem(
-                2, Icons.info_rounded, S.footerAbout.of(context), isArabic),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _navItem(int index, IconData icon, String label, bool isArabic) {
-    final bool active = _selectedIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          setState(() => _selectedIndex = index);
-          switch (index) {
-            case 0:
-              Navigator.pushReplacementNamed(context, '/dashboard');
-              break;
-            case 1:
-              Navigator.pushReplacementNamed(context, '/register');
-              break;
-            case 2:
-              Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => AboutUsPage()));
-              break;
-          }
-        },
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-              decoration: BoxDecoration(
-                color: active
-                    ? AppTheme.accent.withOpacity(0.12)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
-              child: Icon(icon,
-                  size: 24,
-                  color: active ? AppTheme.accent : Colors.grey.shade400),
-            ),
-            const SizedBox(height: 2),
-            Text(label,
-                style: TextStyle(
-                    fontFamily: 'NotoKufi',
-                    fontSize: 10,
-                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                    color: active ? AppTheme.accent : Colors.grey.shade400)),
-            const SizedBox(height: 2),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: active ? 4 : 0,
-              height: active ? 4 : 0,
-              decoration: const BoxDecoration(
-                  color: AppTheme.accent, shape: BoxShape.circle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

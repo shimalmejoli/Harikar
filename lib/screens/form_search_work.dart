@@ -10,7 +10,6 @@ import '../core/app_theme.dart';
 import '../main.dart' show LocaleContext;
 import '../services/api_service.dart';
 import '../widgets/app_scaffold.dart';
-import '../widgets/footer_menu.dart';
 import 'work_details_page.dart';
 
 class FormSearchWork extends StatefulWidget {
@@ -196,7 +195,6 @@ class _FormSearchWorkState extends State<FormSearchWork> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: S.searchWorkAppBarTitle.of(context),
-      bottomNavigationBar: const FooterMenu(),
       body: _isLoading ? _buildLoading(context) : _buildContent(context),
     );
   }

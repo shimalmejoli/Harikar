@@ -10,7 +10,6 @@ import '../core/app_theme.dart';
 import '../services/api_service.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/branded_app_bar.dart';
-import '../widgets/footer_menu.dart';
 import 'SelectDetailPage.dart';
 
 class AdsManagementPage extends StatefulWidget {
@@ -188,7 +187,6 @@ class _AdsManagementPageState extends State<AdsManagementPage> {
           onPressed: _addAd,
         ),
       ],
-      bottomNavigationBar: const FooterMenu(),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.accent))

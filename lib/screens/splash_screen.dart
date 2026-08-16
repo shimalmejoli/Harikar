@@ -3,10 +3,12 @@
 // Shows on EVERY app launch / restart.
 // Flow:
 //   1. Logo + text animation always plays (~1.5s)
-//   2. Language picker is ALWAYS shown — user taps Kurdish or
-//      Arabic to enter the app. The previously-chosen language
-//      is highlighted as the default; on first launch, Kurdish
-//      is pre-highlighted.
+//   2. FIRST launch only — the language picker appears and the user
+//      taps Kurdish or Arabic (Kurdish pre-highlighted). The choice
+//      is saved under 'selectedLanguage'.
+//   3. Every later launch — the saved language is applied and the
+//      splash goes straight to the dashboard, no tap needed. Users
+//      can still switch language any time from the drawer.
 // ─────────────────────────────────────────────────────────────
 
 import 'dart:math' as math;
@@ -48,6 +50,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   bool _showLanguagePicker = false;
   bool _navigating = false; // prevent double-navigation
+  bool _savingLanguage = false; // ignore a second tap while saving
   // Default-highlighted language in the picker. Kurdish on first
   // launch, otherwise whatever the user picked last time.
   String _defaultLang = 'ku';
@@ -140,39 +143,59 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
 
-    // Step 4: read previously-saved language (if any) and pre-apply it
-    // so the picker title etc. render in the right language. The user
-    // STILL must tap to confirm — we always show the picker.
+    // Step 4: decide between "ask once" and "just go".
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('selectedLanguage');
-    final defaultLang =
-        (saved != null && saved.isNotEmpty) ? saved : 'ku';
-    AppLogger.info('Saved language: ${saved ?? "none"} — default: $defaultLang',
+    final alreadyChose = saved != null && saved.isNotEmpty;
+    final lang = alreadyChose ? saved : 'ku';
+    AppLogger.info(
+        'Saved language: ${saved ?? "none"} — '
+        '${alreadyChose ? "skipping picker" : "first launch, asking"}',
         tag: 'SPLASH');
 
     if (!mounted) return;
 
-    // Apply the default language eagerly so any provider listeners
-    // (like the dashboard) are already in sync once the user taps.
+    // Apply the language before either path, so the dashboard (or the
+    // picker itself) renders in the right one from its first frame.
+    // Only saved when it is a real earlier choice — on first launch the
+    // key must stay empty until the user actually taps a language.
     await Provider.of<LocaleProvider>(context, listen: false).setLocale(
-      defaultLang == 'ar' ? const Locale('ar', '') : const Locale('ku', 'IQ'),
+      lang == 'ar' ? const Locale('ar', '') : const Locale('ku', 'IQ'),
+      persist: alreadyChose,
     );
 
     if (!mounted) return;
+
+    // Already chosen on a previous run — straight to the dashboard.
+    // The language can still be changed later from the drawer.
+    if (alreadyChose) {
+      _goToDashboard();
+      return;
+    }
+
+    // First launch — show the picker and wait for a tap.
     setState(() {
-      _defaultLang = defaultLang;
+      _defaultLang = lang;
       _showLanguagePicker = true;
     });
     _langController.forward();
   }
 
+  void _goToDashboard() {
+    if (_navigating || !mounted) return;
+    _navigating = true;
+    Navigator.pushReplacementNamed(context, '/dashboard');
+  }
+
   // ── Language selection ───────────────────────────────────
 
   Future<void> _setLanguage(String code) async {
-    if (_navigating) return;
-    _navigating = true;
+    if (_navigating || _savingLanguage) return;
+    _savingLanguage = true;
     AppLogger.info('Language selected: $code', tag: 'SPLASH');
 
+    // Saving this is what makes the picker a one-time screen: every
+    // later launch finds the key and skips straight to the dashboard.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selectedLanguage', code);
 
@@ -181,7 +204,7 @@ class _SplashScreenState extends State<SplashScreen>
         code == 'ar' ? const Locale('ar', '') : const Locale('ku', 'IQ'));
 
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/dashboard');
+    _goToDashboard();
   }
 
   @override

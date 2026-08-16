@@ -7,7 +7,6 @@ import '../core/app_strings.dart';
 import '../core/app_theme.dart';
 import '../services/feedback_service.dart';
 import '../widgets/app_scaffold.dart';
-import '../widgets/footer_menu.dart';
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({Key? key}) : super(key: key);
@@ -87,7 +86,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: S.feedbackTitle.of(context),
-      bottomNavigationBar: const FooterMenu(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         physics: const BouncingScrollPhysics(),

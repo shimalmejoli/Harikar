@@ -10,7 +10,6 @@ import '../core/app_strings.dart';
 import '../core/app_theme.dart';
 import '../main.dart' show LocaleContext;
 import '../widgets/app_scaffold.dart';
-import '../widgets/footer_menu.dart';
 
 class AboutUsPage extends StatelessWidget {
   const AboutUsPage({Key? key}) : super(key: key);
@@ -22,7 +21,7 @@ class AboutUsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: S.aboutTitle.of(context),
-      bottomNavigationBar: const FooterMenu(selectedIndex: 2),
+      footerIndex: 2,
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         physics: const BouncingScrollPhysics(),

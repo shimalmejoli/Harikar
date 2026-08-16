@@ -7,6 +7,8 @@
 //  • [BrandedAppBar] with consistent gradient + leading icon.
 //  • [CustomDrawer] on the start side — in this RTL app, that
 //    places the hamburger AND drawer on the RIGHT for every screen.
+//  • [FooterMenu] at the bottom of EVERY screen (home / register /
+//    about), unless the screen opts out or supplies its own bar.
 //
 // Use instead of bare Scaffold + AppBar for consistency.
 // ─────────────────────────────────────────────────────────────
@@ -16,6 +18,7 @@ import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
 import 'branded_app_bar.dart';
 import 'custom_drawer.dart';
+import 'footer_menu.dart';
 
 class AppScaffold extends StatelessWidget {
   /// Plain text title for the AppBar. Mutually exclusive with [titleWidget].
@@ -45,7 +48,18 @@ class AppScaffold extends StatelessWidget {
   /// Page body.
   final Widget body;
 
+  /// Custom bottom bar. When null, the shared [FooterMenu] is used —
+  /// pass one only when a screen needs something different.
   final Widget? bottomNavigationBar;
+
+  /// Set false to hide the footer entirely on a screen where it would
+  /// get in the way (e.g. a full-screen viewer).
+  final bool showFooterMenu;
+
+  /// Which footer tab is highlighted: 0 = home, 1 = register,
+  /// 2 = about, -1 (default) = none, for screens that aren't a
+  /// footer destination.
+  final int footerIndex;
   final Widget? floatingActionButton;
   final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Color? backgroundColor;
@@ -63,6 +77,8 @@ class AppScaffold extends StatelessWidget {
     this.isHomePage = false,
     required this.body,
     this.bottomNavigationBar,
+    this.showFooterMenu = true,
+    this.footerIndex = -1,
     this.floatingActionButton,
     this.floatingActionButtonLocation,
     this.backgroundColor,
@@ -91,7 +107,10 @@ class AppScaffold extends StatelessWidget {
         // hamburger AND drawer on the RIGHT for every screen.
         drawer: showDrawer ? const CustomDrawer() : null,
         body: body,
-        bottomNavigationBar: bottomNavigationBar,
+        // Screen-supplied bar wins; otherwise every screen gets the
+        // shared footer so the main destinations are always reachable.
+        bottomNavigationBar: bottomNavigationBar ??
+            (showFooterMenu ? FooterMenu(selectedIndex: footerIndex) : null),
         floatingActionButton: floatingActionButton,
         floatingActionButtonLocation: floatingActionButtonLocation,
       ),

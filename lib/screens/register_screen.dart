@@ -12,7 +12,6 @@ import '../core/phone_utils.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../widgets/app_scaffold.dart';
-import '../widgets/footer_menu.dart';
 import 'InsertDetailsPageNo.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -183,7 +182,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: S.registerTitle.of(context),
-      bottomNavigationBar: const FooterMenu(selectedIndex: _selectedTabIndex),
+      footerIndex: _selectedTabIndex,
       body: Consumer<UserModel>(
         builder: (context, userModel, _) {
           if (userModel.name.isNotEmpty && userModel.phoneNumber.isNotEmpty) {

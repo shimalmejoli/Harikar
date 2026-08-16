@@ -5,7 +5,7 @@ description: "Harikar project."
 # upload — Play rejects a versionCode that was already used, even by a
 # discarded/rolled-back release. (Play production is 1.0.5; 18 may
 # already be consumed, so this release jumps to 20.)
-version: 1.0.6+20
+version: 1.0.7+21
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

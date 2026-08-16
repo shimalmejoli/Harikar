@@ -10,7 +10,6 @@ import '../core/app_strings.dart';
 import '../core/app_theme.dart';
 import '../services/api_service.dart';
 import '../widgets/app_scaffold.dart';
-import '../widgets/footer_menu.dart';
 
 class UsersPage extends StatefulWidget {
   const UsersPage({Key? key}) : super(key: key);
@@ -304,7 +303,7 @@ class _UsersPageState extends State<UsersPage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       titleWidget: _buildSearchField(context),
-      bottomNavigationBar: const FooterMenu(selectedIndex: 2),
+      footerIndex: 2,
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.accent))

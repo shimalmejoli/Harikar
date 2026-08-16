@@ -172,15 +172,22 @@ class LocaleProvider extends ChangeNotifier {
   Locale get locale => _locale;
   String get langCode => _langCode;
 
-  Future<void> setLocale(Locale locale) async {
+  /// Switches the display language. [persist] writes the choice to
+  /// SharedPreferences — pass false to apply a language for this session
+  /// only, which the splash screen does while the first-launch picker is
+  /// still on screen (saving there would count as a choice the user
+  /// never made, and the picker would never appear again).
+  Future<void> setLocale(Locale locale, {bool persist = true}) async {
     // locale.languageCode will be 'ku' or 'ar' (passed from splash screen)
     _langCode = locale.languageCode;
     // Keep actual Flutter locale as 'ar' always — gives us RTL + delegates
     _locale = const Locale('ar', 'IQ');
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selectedLanguage', _langCode);
-    AppLogger.info('Language set to $_langCode', tag: 'MAIN');
+    if (persist) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selectedLanguage', _langCode);
+    }
+    AppLogger.info('Language set to $_langCode (saved: $persist)', tag: 'MAIN');
     notifyListeners();
   }
 }

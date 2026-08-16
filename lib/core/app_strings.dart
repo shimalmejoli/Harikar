@@ -123,10 +123,10 @@ class S {
       'خەلەتی د ڤەهاندنا پۆلان دا. هیڤیە دووبارە بکەڤە.');
   static const dashboardTitle = TString('الصفحة الرئيسية', 'پەڕا سەرەکی');
   static const dashboardFeaturedAds =
-      TString('إعلانات مميزة', 'ئیلانە تایبەتەکان');
-  static const dashboardAdBadge = TString('إعلان', 'ئیلان');
-  static const dashboardCategories = TString('الأقسام', 'پۆلەکان');
-  static const dashboardCategoryBadge = TString('قسم', 'پۆل');
+      TString('إعلانات مميزة', 'ریکلامێت تایبەت');
+  static const dashboardAdBadge = TString('إعلان', 'ریکلام');
+  static const dashboardCategories = TString('الأقسام', 'بەشەکان');
+  static const dashboardCategoryBadge = TString('قسم', 'بەش');
   static const dashboardAdCardText = TString(
       'إذا كنت ترغب في عرض إعلانك في التطبيق، اتصل بنا',
       'ژ بۆ ڕیکلامکرنێ دناڤ بەرنامەیێ هاریکار دا پەیوەندی بکە');
@@ -223,16 +223,17 @@ class S {
       'پشتی تومارکرنێ دێ پەیوەندی ب تە کەین بۆ پتر پێزانینان دناف پروگرامێ هاریکاردا.');
 
   // ── About ────────────────────────────────────────────────
-  static const aboutTitle = TString('حولنا', 'دەربارەی ئێمە');
+  static const aboutTitle = TString('حولنا', 'دەربارەی مە');
   static const aboutHeroDescription = TString(
       'تطبيق هاريكار يساعدك على إيجاد العمال والمهندسين والخبرات التي تحتاجها بسرعة وكفاءة.',
-      'بەرنامەی هاریکار یارمەتیت دەدات بۆ دۆزینەوەی کرێکار، ئەندازیار و پسپۆڕان بە خێرایی و باشترین شێوە.');
+      'پرۆگرامی هاریکاری هاری تەدکەت بۆ دیتنا کارێ تە.');
   static const aboutBrand = TString('هاريكار', 'هاریکار');
   static const aboutContactTitle =
       TString('رقم التواصل للشركة', 'ژمارەی پەیوەندی کۆمپانیا');
   static const aboutContactCardLabel =
-      TString('اتصل بنا', 'پەیوەندیمان پێوە بکە');
-  static const aboutAdvertiseTitle = TString('أعلن معنا', 'ڕیکلام لەگەڵمان');
+      TString('اتصل بنا', 'پەیوەندی مە بکە');
+  static const aboutAdvertiseTitle =
+      TString('أعلن معنا', 'ژ بو ریکلامکرنێ دگەل مە');
   static const aboutAdvertiseDescription = TString(
       'إذا كنت ترغب في عرض إعلانك في التطبيق، تواصل معنا الآن.',
       'بۆ ڕیکلامکردن لە ناو بەرنامەکەدا، پەیوەندیمان پێوە بکە.');
@@ -546,7 +547,7 @@ class S {
   static const searchWorkLoadError = TString(
       'فشل تحميل البيانات. حاول مرة أخرى لاحقاً.',
       'زانیاریەکان بارنەکران. تکایە دووبارە هەوڵ بدە.');
-  static const searchWorkAppBarTitle = TString('البحث عن عمل', 'زانیاری کار');
+  static const searchWorkAppBarTitle = TString('البحث عن عمل', 'پێزانین کاری');
   static const searchWorkLoadingData =
       TString('جاري تحميل البيانات...', 'جارى باركردنى زانیاریەکان...');
   static const searchWorkAllSections = TString('جميع الأقسام', 'هەمی بەش');
