@@ -32,6 +32,10 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+# Gradle writes here too, and it is build output like /build — without
+# this line `git add .` would try to commit hundreds of MB of artifacts.
+android/build/
+android/app/build/
 
 # Symbolication related
 app.*.symbols
