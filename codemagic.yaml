@@ -34,11 +34,18 @@ workflows:
       - name: Install Flutter dependencies
         script: flutter pub get
 
-      # Decouple the iOS build number from the Android versionCode in
-      # pubspec. The numeric App Store app id is resolved from BUNDLE_ID
-      # at build time, so there is no id to paste in by hand — and the
-      # very first release (no app record / no builds yet) starts at 1.
-      - name: Set iOS build number from App Store Connect
+      # iOS version + build number both come from App Store Connect, not
+      # from pubspec: pubspec's version tracks the Play release (Android
+      # versionCode), and App Store Connect only accepts a build whose
+      # version string matches the version record it is attached to.
+      #
+      #   version string → the record currently open for editing
+      #                    (PREPARE_FOR_SUBMISSION / REJECTED / etc.)
+      #   build number   → highest build already uploaded, + 1
+      #
+      # Anything that can't be resolved falls back to pubspec's values,
+      # so the build still runs rather than failing on a lookup.
+      - name: Read iOS version and build number from App Store Connect
         script: |
           set -e
           APP_ID=$(app-store-connect apps list \
@@ -46,17 +53,40 @@ workflows:
                      --json 2>/dev/null | jq -r '.[0].id // empty' || true)
 
           if [ -z "$APP_ID" ]; then
-            echo "No App Store Connect record for $BUNDLE_ID yet — starting at build 1"
-            NEW_BUILD=1
-          else
-            LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_ID" 2>/dev/null || echo "0")
-            case "$LATEST" in
-              ''|*[!0-9]*) LATEST=0 ;;
-            esac
-            NEW_BUILD=$((LATEST + 1))
-            echo "App id $APP_ID — latest App Store build: $LATEST → using $NEW_BUILD"
+            echo "No App Store Connect record for $BUNDLE_ID — falling back to pubspec"
+            exit 0
           fi
+          echo "App Store Connect app id: $APP_ID"
+
+          # --- build number -------------------------------------------------
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_ID" 2>/dev/null || echo "0")
+          case "$LATEST" in
+            ''|*[!0-9]*) LATEST=0 ;;
+          esac
+          NEW_BUILD=$((LATEST + 1))
+          echo "latest uploaded build: $LATEST → using $NEW_BUILD"
           echo "IOS_BUILD_NUMBER=$NEW_BUILD" >> "$CM_ENV"
+
+          # --- version string -----------------------------------------------
+          # Prefer a version still open for editing; if every record is
+          # already live, reuse the newest one so the upload is at least
+          # rejected loudly instead of silently mismatching.
+          VERSIONS=$(app-store-connect apps app-store-versions "$APP_ID" --json 2>/dev/null || echo '[]')
+          IOS_VERSION=$(echo "$VERSIONS" | jq -r '
+            [ .[] | select(.attributes.appStoreState
+                | test("PREPARE_FOR_SUBMISSION|DEVELOPER_REJECTED|REJECTED|METADATA_REJECTED|WAITING_FOR_REVIEW|IN_REVIEW|PENDING_DEVELOPER_RELEASE")) ]
+            | first | .attributes.versionString // empty')
+
+          if [ -z "$IOS_VERSION" ]; then
+            IOS_VERSION=$(echo "$VERSIONS" | jq -r '.[0].attributes.versionString // empty')
+          fi
+
+          if [ -n "$IOS_VERSION" ]; then
+            echo "App Store Connect version record: $IOS_VERSION"
+            echo "IOS_VERSION=$IOS_VERSION" >> "$CM_ENV"
+          else
+            echo "No version record found — falling back to the pubspec version"
+          fi
 
       # Fetch (or create) the distribution certificate + App Store
       # provisioning profile, then point the Xcode project at them.
@@ -78,8 +108,20 @@ workflows:
       - name: Build .ipa for release
         script: |
           set -e
-          flutter build ipa --release \
-            --build-number="$IOS_BUILD_NUMBER" \
+          # Empty vars mean the lookup found nothing, so the flag is left
+          # off entirely and Flutter uses the pubspec value. Written as
+          # `if` blocks, not `[ ... ] && ...` — a false test returns 1 and
+          # `set -e` would abort the step on exactly the fallback path.
+          ARGS=""
+          if [ -n "$IOS_VERSION" ]; then
+            ARGS="$ARGS --build-name=$IOS_VERSION"
+          fi
+          if [ -n "$IOS_BUILD_NUMBER" ]; then
+            ARGS="$ARGS --build-number=$IOS_BUILD_NUMBER"
+          fi
+          echo "Building with:${ARGS:- pubspec version}"
+
+          flutter build ipa --release $ARGS \
             --export-options-plist="$HOME/export_options.plist"
 
     artifacts:
